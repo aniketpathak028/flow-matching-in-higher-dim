@@ -1,0 +1,17 @@
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+.DS_Store
+
+# generated datasets, model checkpoints, and rendered videos
+*.pt
+*.mp4
+flow_matching_results/
+
+# python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
