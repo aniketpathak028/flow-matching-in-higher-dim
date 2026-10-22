@@ -1,8 +1,10 @@
-# MuJoCo Flow Matching
+# Flow Matching in higher dimensions using MuJoCo
 
 This project uses MuJoCo to simulate robot arms with different numbers of links. It trains a flow-matching model to predict the next arm state, then compares its predictions with a MuJoCo simulation.
 
-Each state contains the arm's joint positions and velocities. The experiment can compare several arm sizes, such as 1, 2, 3, 5, and 10 links.
+Each state contains the arm's joint positions and velocities. The experiment can compare several arm sizes, such as 1, 2, 3, 5, 10, 64, 256 and even 1024 links.
+
+The goal of the experiment is to see how flow matching behaves in higher dimensions and track it using the explicit states of the MuJoCo simulator!
 
 ## Setup
 
