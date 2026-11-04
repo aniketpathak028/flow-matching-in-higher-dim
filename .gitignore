@@ -1,17 +1,27 @@
-
 .venv/
 venv/
 __pycache__/
 *.py[cod]
-
 .DS_Store
-
-# generated datasets, model checkpoints, and rendered videos
-*.pt
-*.mp4
-flow_matching_results/
 
 # python tooling
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# private notes and local Claude Code settings
+notes.txt
+.claude/settings.local.json
+
+# experiment outputs: only the summary is tracked
+# (results/REPORT.md, results/figures/, results/summary.json); the rest is regenerated
+results/datasets/
+results/runs/
+results/videos/
+results/*.log
+results_*/
+*.pt
+
+# videos are tracked only for the website (docs/videos/)
+*.mp4
+!docs/videos/*.mp4
