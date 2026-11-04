@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Pendulum Physics with Flow Matching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: a scrolling deck. Each experiment is a full-width "slide" card: question, evidence (charts, video), conclusion. */
+:root {
+  --paper: #eef2f4;
+  --card: #ffffff;
+  --ink: #12202a;
+  --muted: #56646e;
+  --grid: #dde3e7;
+  --accent: #1c64b8;
+  --accent-soft: #e4eef9;
+  --warn: #b4461c;
+  --warn-soft: #fbece5;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0c1216; --card: #151e24; --ink: #e3eaee; --muted: #9aa8b1; --grid: #28343c;
+    --accent: #6aaef0; --accent-soft: #172b3d; --warn: #ef8e64; --warn-soft: #36211a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0c1216; --card: #151e24; --ink: #e3eaee; --muted: #9aa8b1; --grid: #28343c;
+  --accent: #6aaef0; --accent-soft: #172b3d; --warn: #ef8e64; --warn-soft: #36211a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.6 var(--font-body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 40px 20px 96px; }
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; }
+p, li { max-width: 72ch; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+strong { font-weight: 600; }
+.n, td.n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Title */
+.title h1 { font: 700 clamp(34px, 5.4vw, 54px)/1.04 var(--font-display); margin: 0 0 14px; letter-spacing: -.01em; }
+.title p.lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; }
+.kicker { font: 500 13px/1 var(--font-mono); color: var(--accent); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 14px; }
+
+/* Headline findings */
+.findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.finding { background: var(--card); border: 1px solid var(--grid); border-radius: 12px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 6px; }
+.finding .big { font: 700 34px/1 var(--font-display); color: var(--accent); }
+.finding .big.warn { color: var(--warn); }
+.finding .what { font-weight: 600; font-size: 15px; line-height: 1.35; }
+.finding .ctx { font-size: 14px; color: var(--muted); line-height: 1.45; }
+
+/* Contents */
+nav.toc { margin: 34px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { font: 500 13px/1 var(--font-mono); text-decoration: none; color: var(--ink); background: var(--card); border: 1px solid var(--grid); border-radius: 999px; padding: 8px 12px; }
+nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Slides */
+section.slide { background: var(--card); border: 1px solid var(--grid); border-radius: 16px; padding: 30px 30px 26px; margin-top: 28px; scroll-margin-top: 16px; }
+.slide header { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: baseline; margin-bottom: 18px; }
+.slide .no { font: 700 15px/1 var(--font-mono); color: var(--accent); grid-row: span 2; padding-top: 6px; }
+.slide h2 { font: 700 28px/1.12 var(--font-display); margin: 0; }
+.slide .q { margin: 0; color: var(--muted); font-size: 17px; font-style: italic; }
+.slide h3 { font: 600 16px/1.3 var(--font-body); margin: 20px 0 6px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 18px; }
+.chart { min-height: 220px; width: 100%; }
+.conclusion { margin-top: 18px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 14px 18px; }
+.conclusion.warn { border-color: var(--warn); background: var(--warn-soft); }
+.conclusion h3 { margin: 0 0 6px; font: 700 13px/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.conclusion.warn h3 { color: var(--warn); }
+.conclusion p, .conclusion ul { margin: 0 0 8px; }
+.conclusion p:last-child, .conclusion ul:last-child { margin-bottom: 0; }
+.conclusion ul { padding-left: 20px; }
+.setup-list { font-size: 15px; color: var(--muted); margin: 0 0 8px; }
+figure.video { margin: 0; }
+figure.video video { width: 100%; height: auto; display: block; border-radius: 10px; background: #1d2a33; }
+figure.video figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+details.numbers { margin-top: 16px; }
+details.numbers summary { cursor: pointer; font: 500 13px/1.4 var(--font-mono); color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 10px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { font: 600 12px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+td.n { white-space: nowrap; font-size: 13px; }
+.ci { color: var(--muted); }
+.callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.mini { border: 1px solid var(--grid); border-radius: 10px; padding: 14px 16px; }
+.mini h4 { margin: 0 0 6px; font: 600 15px/1.3 var(--font-body); }
+.mini p { margin: 0; font-size: 15px; }
+
+/* How it works diagram */
+figure.diagram { margin: 10px 0 0; overflow-x: auto; }
+figure.diagram svg { display: block; width: 100%; min-width: 640px; height: auto; color: var(--ink); }
+figure.diagram figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
+footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
+@media (max-width: 560px) { section.slide { padding: 22px 16px; } .slide header { grid-template-columns: 1fr; } .slide .no { grid-row: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="title">
+  <div class="kicker">MuJoCo · flow matching · 10 experiments</div>
+  <h1>Learning pendulum physics with flow matching</h1>
+  <p class="lede">A small network learns to predict the next state of simulated pendulums and related systems. Ten experiments test which setups it handles, which inputs it needs, and where it breaks.</p>
+</div>
+
+<div class="findings" aria-label="Headline findings">
+  <div class="finding"><div class="big">100 / 100</div><div class="what">steps stay accurate for hanging pendulums</div><div class="ctx">The same model on the ground setup goes off after 25 steps. Its one-step error is about 1,600× higher.</div></div>
+  <div class="finding"><div class="big warn">59%</div><div class="what">of predicted ground states have a rod inside the floor</div><div class="ctx">In the true motion: 0%. The model learns that rods fall, not that the floor stops them.</div></div>
+  <div class="finding"><div class="big">900×</div><div class="what">worse for one 8-link chain than for 8 separate pendulums</div><div class="ctx">Both have 16 numbers per state. Coupling between joints is what makes prediction hard, not the size of the state.</div></div>
+  <div class="finding"><div class="big">170×</div><div class="what">worse when gravity varies and the model is not told</div><div class="ctx">When gravity is the same in every clip, not telling it costs nothing. A hidden factor only hurts when it varies.</div></div>
+</div>
+
+<nav class="toc" aria-label="Experiments">
+  <a href="#how">How it works</a>
+  <a href="#setup">1 · Hanging vs ground</a>
+  <a href="#collisions">2 · The floor</a>
+  <a href="#size">3 · Pendulums vs chains</a>
+  <a href="#design">4 · Model choices</a>
+  <a href="#gravity">5 · Gravity</a>
+  <a href="#extrapolation">6 · Unseen gravity</a>
+  <a href="#damping">7 · Damping</a>
+  <a href="#context">8 · Past states</a>
+  <a href="#nuisance">9 · Random tokens</a>
+  <a href="#systems">10 · Other worlds</a>
+  <a href="#summary">Summary</a>
+</nav>
+
+<!-- How it works -->
+<section class="slide" id="how">
+  <header><div class="no">00</div><h2>How it works</h2><p class="q">What is learned, how it is trained, how it is scored.</p></header>
+  <p>The simulator records the <strong>state</strong> of a world every 0.01 s: the position and speed of every joint. For a hinge, the position is its angle. A network gets the current state and predicts the next one. Chaining its predictions lets it play the physics forward with no simulator; this is called a <strong>rollout</strong>.</p>
+  <figure class="diagram">
+    <svg viewBox="0 0 980 190" role="img" aria-label="Pipeline: simulate clips in MuJoCo, build input and answer pairs, train with flow matching, then score one-step error and 100-step rollouts on unseen clips.">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="IBM Plex Sans, sans-serif" fill="currentColor">
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="10" y="40" width="210" height="96" rx="10"/>
+          <rect x="260" y="40" width="210" height="96" rx="10"/>
+          <rect x="510" y="40" width="210" height="96" rx="10" style="stroke:var(--accent);fill:var(--accent-soft)" stroke-width="2"/>
+          <rect x="760" y="40" width="210" height="96" rx="10"/>
+        </g>
+        <g font-size="15" font-weight="600" text-anchor="middle">
+          <text x="115" y="68">1 · Simulate</text><text x="365" y="68">2 · Make examples</text>
+          <text x="615" y="68">3 · Train</text><text x="865" y="68">4 · Score</text>
+        </g>
+        <g font-size="12.5" text-anchor="middle" opacity=".8">
+          <text x="115" y="92">200 training + 50 test clips</text><text x="115" y="110">2 s each, random start</text><text x="115" y="128">random gravity 4–15 per clip</text>
+          <text x="365" y="92">input: state (+ gravity)</text><text x="365" y="110">answer: change to next state</text><text x="365" y="128">all scaled to mean 0, std 1</text>
+          <text x="615" y="92">flow matching, 60 epochs</text><text x="615" y="110">residual MLP, 3 × 256</text><text x="615" y="128">20 steps from noise to answer</text>
+          <text x="865" y="92">only on the 50 unseen clips</text><text x="865" y="110">1-step error · 100-step rollout</text><text x="865" y="128">3 seeds, 95% intervals</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5">
+          <line x1="220" y1="88" x2="257" y2="88" marker-end="url(#ar)"/>
+          <line x1="470" y1="88" x2="507" y2="88" marker-end="url(#ar)"/>
+          <line x1="720" y1="88" x2="757" y2="88" marker-end="url(#ar)"/>
+        </g>
+        <path d="M865,136 L865,166 L115,166 L115,139" fill="none" style="stroke:var(--accent)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+        <text x="490" y="160" font-size="12.5" text-anchor="middle" style="fill:var(--accent)">rollout: each prediction is fed back as the next input</text>
+      </g>
+    </svg>
+    <figcaption>One run. Every variant below is trained 3 times with different seeds (new clips and new starting weights); the charts show the mean with a 95% confidence interval.</figcaption>
+  </figure>
+  <div class="callouts">
+    <div class="mini"><h4>1-step error</h4><p>Squared error of one prediction ÷ the size of a typical one-step change. <strong>1.0</strong> means no better than guessing the average change; <strong>0.001</strong> means the error is 0.1% of it. Log scale in the charts.</p></div>
+    <div class="mini"><h4>Valid steps</h4><p>How many of 100 rollout steps (1 s) pass before the prediction is clearly off: error above 0.5 of the state's typical spread. <strong>100</strong> = good for the whole second.</p></div>
+    <div class="mini"><h4>Shuffle test &amp; gap</h4><p><strong>Shuffle:</strong> scramble one input between test examples. If the error barely changes, the model ignores that input. <strong>Gap:</strong> test error ÷ training error. Far above 1 means memorised.</p></div>
+  </div>
+  <div class="grid2" style="margin-top:18px">
+    <div class="mini"><h4>Hanging pendulum</h4><p>Rods hang from a raised mount and swing freely. Nothing touches anything. Default for experiments 3–10: 8 separate pendulums, 16 numbers per state.</p></div>
+    <div class="mini"><h4>Ground pendulum</h4><p>The project's original setup. Rods are hinged just above a solid floor and start upright with a random push, so they fall, hit the floor and come to rest.</p></div>
+  </div>
+</section>
+
+<!-- 1 -->
+<section class="slide" id="setup">
+  <header><div class="no">01</div><h2>Hanging vs ground pendulum</h2><p class="q">How much harder is the original ground setup than a freely hanging pendulum?</p></header>
+  <p class="setup-list">8 single pendulums in both cases, gravity told, same model and training.</p>
+  <div class="grid2">
+    <div class="chart" id="c-setup-1"></div>
+    <div class="chart" id="c-setup-2"></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <figure class="video"><video src="videos/hang_P8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Hanging: truth (left) and model (right) over 1 s. They stay together.</figcaption></figure>
+    <figure class="video"><video src="videos/ground_P8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Ground: the model's rods keep falling through the floor (seen through the see-through floor) or stay up.</figcaption></figure>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li>The hanging setup is learned almost perfectly: one-step error <span class="n">0.0005</span>, and all 100 rollout steps stay accurate.</li>
+      <li>The ground setup is about <strong>1,600× harder</strong>: error <span class="n">0.82</span>, barely better than guessing. Rollouts go off after about 25 steps (0.25 s).</li>
+      <li>Ground rods touch the floor in 80% of steps. A breakdown of the errors (seed 0) shows rods lying still are predicted well. The error comes from speeds while a rod falls or bounces, where each impact reverses the speed suddenly.</li>
+      <li>So the hanging pendulum is the clean test case, and all later comparisons use it.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-setup"></div></details>
+</section>
+
+<!-- 2 -->
+<section class="slide" id="collisions">
+  <header><div class="no">02</div><h2>Does the model learn the floor?</h2><p class="q">Do predicted rods respect the floor, and are the steps with contact the hard part?</p></header>
+  <p class="setup-list">Ground setup: 8 single pendulums, and single chains of 2, 4 and 8 links. In the true motion, rods never sink more than about 2 cm into the floor, so more than 5 cm counts as "through the floor".</p>
+  <div class="grid2">
+    <div class="chart" id="c-coll-1"></div>
+    <div class="chart" id="c-coll-2"></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="chart" id="c-coll-3"></div>
+    <figure class="video"><video src="videos/ground_L8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Chain of 8 links on the ground. The true chain lies on the floor; the predicted chain folds into it.</figcaption></figure>
+  </div>
+  <div class="conclusion warn">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>The model does not learn collision physics.</strong> In predicted rollouts a rod is more than 5 cm inside the floor in <strong>59%</strong> of states for 8 pendulums, and 23–42% for the chains. In the true motion this never happens. On average, the deepest point of a predicted rollout is 27 cm below the floor (68 cm for the 8-link chain).</li>
+      <li>The share grows over the rollout. For 8 pendulums it is 0% at the start, 87% after half a second and 99% after one second. The model learned that rods fall, but nothing stops them at the floor.</li>
+      <li>Steps with floor contact are 1.2–2.4× harder than steps without. But even steps with no contact (0.40–0.64) are hundreds of times worse than the hanging pendulum. The floor hurts the whole model, not only the moment of impact.</li>
+      <li>The model only sees angles and speeds. Where the floor is must be inferred from the data, and a hard limit like that is exactly what a smooth network approximates badly.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-collisions"></div></details>
+</section>
+
+<!-- 3 -->
+<section class="slide" id="size">
+  <header><div class="no">03</div><h2>More pendulums vs longer chains</h2><p class="q">Is it the size of the state or the coupling between joints that makes prediction hard, hanging and on the ground?</p></header>
+  <p class="setup-list">State size D = 2 × joints. "More pendulums": 1, 2, 4, 8 separate single pendulums. "Longer chain": one pendulum with 1, 2, 4, 8 links. Same D at each point. Solid = hanging, dashed = ground.</p>
+  <div class="grid2">
+    <div class="chart" id="c-size-1"></div>
+    <div class="chart" id="c-size-2"></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <figure class="video"><video src="videos/hang_L8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Hanging chain of 8 links: truth and model drift apart within about 0.4 s.</figcaption></figure>
+    <div class="conclusion" style="margin-top:0">
+      <h3>Conclusion</h3>
+      <ul>
+        <li><strong>Hanging, more pendulums:</strong> error grows from <span class="n">0.00002</span> (D = 2) to <span class="n">0.0005</span> (D = 16), and every rollout stays good for all 100 steps. A bigger state alone is easy.</li>
+        <li><strong>Hanging, longer chain:</strong> error rises to <span class="n">0.46</span> at 8 links, and rollouts last 37 steps. At the same D = 16 that is <strong>900× worse</strong> than 8 separate pendulums. Coupled joints are chaotic: small errors grow fast.</li>
+        <li><strong>Ground:</strong> everything is hard, even a single pendulum (error <span class="n">0.59</span>, 39 steps). Size and coupling barely matter there, because the floor dominates.</li>
+      </ul>
+    </div>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-size"></div></details>
+</section>
+
+<!-- 4 -->
+<section class="slide" id="design">
+  <header><div class="no">04</div><h2>Flow matching vs regression, change vs next state</h2><p class="q">Which model and which prediction target work best?</p></header>
+  <p class="setup-list">Hanging, 8 pendulums. "Change" = predict the difference to the next state; "next state" = predict the whole next state.</p>
+  <div class="grid2">
+    <div class="chart" id="c-design-1"></div>
+    <div class="chart" id="c-design-2"></div>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>Predict the change:</strong> in 0.01 s a pendulum barely moves, so the next state is almost a copy of the current one. Predicting only the change is about <strong>33×</strong> more accurate with flow matching.</li>
+      <li><strong>Flow matching beats plain regression</strong> by about 16× on the same target. Regression also memorises: its test error is 37× its training error, against 2.7× for flow matching.</li>
+      <li>Regression on the next state is the worst combination: error <span class="n">0.80</span>, rollouts last 15 steps.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-design"></div></details>
+</section>
+
+<!-- 5 -->
+<section class="slide" id="gravity">
+  <header><div class="no">05</div><h2>Telling the model gravity</h2><p class="q">When does it matter whether the model is told the gravity of a clip?</p></header>
+  <p class="setup-list">Hanging, 8 pendulums. Gravity is either the same in every clip (9.81) or drawn per clip from 4–15. The model is either given g as an input or not.</p>
+  <div class="grid2">
+    <div class="chart" id="c-gravity-1"></div>
+    <div class="chart" id="c-gravity-2"></div>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>Gravity fixed, not told:</strong> no harm at all (error <span class="n">0.0002</span>). With nothing to tell, the model learns the single gravity from the data.</li>
+      <li><strong>Gravity varies, not told:</strong> error <span class="n">0.085</span>, about <strong>170×</strong> worse than when told, and rollouts last 65 steps instead of 100. From one state the model cannot tell the Moon from Jupiter.</li>
+      <li><strong>Told:</strong> the model relies on it heavily. Scrambling gravity between test examples makes the error about 220× larger.</li>
+      <li>So telling the model gravity matters exactly when gravity varies across the data.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-gravity"></div></details>
+</section>
+
+<!-- 6 -->
+<section class="slide" id="extrapolation">
+  <header><div class="no">06</div><h2>Gravities outside the training range</h2><p class="q">Does a model trained on gravity 4–15 work at gravity 2, 20 or 25?</p></header>
+  <p class="setup-list">Each trained model is tested on clips at six fixed gravities. The shaded band is the 4–15 training range.</p>
+  <div class="chart" id="c-extra-1"></div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li>Trained on 4–15 and told gravity, the model is excellent inside the range (<span class="n">0.0004</span> at Earth gravity). Outside it gets steadily worse: 17× at g = 2, 73× at g = 20, <strong>530×</strong> at g = 25.</li>
+      <li>Trained on a wider range (2–25), all six test gravities stay good (at most <span class="n">0.002</span>), at a small cost inside the old range (<span class="n">0.0008</span> instead of <span class="n">0.0005</span>).</li>
+      <li>The model interpolates between the gravities it has seen. It has not learned gravity as a rule it can extend. Coverage in the training data is what counts.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-extrapolation"></div></details>
+</section>
+
+<!-- 7 -->
+<section class="slide" id="damping">
+  <header><div class="no">07</div><h2>Joint damping</h2><p class="q">Does joint friction that varies between clips hurt, and does telling the model fix it?</p></header>
+  <p class="setup-list">Hanging, 8 pendulums, gravity told. Damping is a braking torque proportional to joint speed. At 0.15 it stops a swinging rod within about a second. It is either absent, the same in every clip (0.075), or drawn per clip from 0–0.15.</p>
+  <div class="grid2">
+    <div class="chart" id="c-damping-1"></div>
+    <div class="chart" id="c-damping-2"></div>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li>The same pattern as gravity. Damping that is <strong>the same in every clip</strong> costs little even when not told (error <span class="n">0.0016</span>, 100 steps).</li>
+      <li>Damping that <strong>varies and is hidden</strong> makes the error <span class="n">0.018</span>, about 35× the no-damping case, and rollouts last 80 steps.</li>
+      <li><strong>Telling the model</strong> recovers most of it (<span class="n">0.0032</span>, 100 steps), and it uses the input: scrambling damping makes the error 9× larger.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-damping"></div></details>
+</section>
+
+<!-- 8 -->
+<section class="slide" id="context">
+  <header><div class="no">08</div><h2>Past states as context</h2><p class="q">Do 2–5 past states help, and when?</p></header>
+  <p class="setup-list">Hanging, 8 pendulums. K = number of states the model sees. "Full" = positions and speeds. "Positions" = angles only, no speeds.</p>
+  <div class="grid2">
+    <div class="chart" id="c-context-1"></div>
+    <div class="chart" id="c-context-2"></div>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>Full state, gravity told:</strong> history adds nothing (≈ <span class="n">0.0005</span> for every K). One state already contains everything needed for the next.</li>
+      <li><strong>Positions only:</strong> one state is useless (error <span class="n">1.56</span>, rollouts last 10 steps), because speed cannot be seen in a single snapshot. <strong>Two states are enough</strong> to work it out (<span class="n">0.0003</span>), and with 3–5 states rollouts last about the full 100 steps.</li>
+      <li><strong>Gravity not told:</strong> 5 states cut the one-step error 5× (<span class="n">0.085 → 0.017</span>): the model starts to infer gravity from how fast things accelerate. Rollouts improve only a little (65 → 69 steps), so this is far from telling it gravity.</li>
+      <li>History helps exactly when a single state is missing something: speeds, or a hidden factor like gravity.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-context"></div></details>
+</section>
+
+<!-- 9 -->
+<section class="slide" id="nuisance">
+  <header><div class="no">09</div><h2>Random nuisance tokens</h2><p class="q">Does the model ignore meaningless random inputs, or learn from them?</p></header>
+  <p class="setup-list">Hanging, 8 pendulums. Tokens are random numbers added to the input that have nothing to do with the physics. They are either redrawn every step, or drawn once per clip, which makes them work like a name tag for the clip.</p>
+  <div class="grid2">
+    <div class="chart" id="c-nuisance-1"></div>
+    <div class="chart" id="c-nuisance-2"></div>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>Tokens redrawn every step are ignored:</strong> error unchanged (<span class="n">0.0005</span>), and scrambling them changes nothing.</li>
+      <li><strong>Tokens fixed per clip are learned from:</strong> with 32 of them the error is 3.5× higher, the train/test gap rises from 2.7 to 7, and the model leans less on real gravity: scrambling gravity now raises the error about 60× instead of about 220×. It partly uses the tag to recognise training clips.</li>
+      <li>Without gravity told, 32 per-clip tokens drive the gap to <strong>141</strong> (from 19). The model memorises each training clip, including its gravity, by its tag. On new clips the tags mean nothing, so test error does not improve.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-nuisance"></div></details>
+</section>
+
+<!-- 10 -->
+<section class="slide" id="systems">
+  <header><div class="no">10</div><h2>Other worlds</h2><p class="q">How do springs, cart-poles and bouncing balls compare with the hanging pendulum at the same state size?</p></header>
+  <p class="setup-list">All with 16 numbers per state and gravity told. Spring chains: 4 chains of 2 masses on springs. Cart-poles: 4 carts sliding on rails, each with a free pole. Balls: 4 balls bouncing in a box.</p>
+  <div class="grid2">
+    <div class="chart" id="c-systems-1"></div>
+    <div class="chart" id="c-systems-2"></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <figure class="video"><video src="videos/spring_D16.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Spring chains: truth and model are indistinguishable. This world has no floor (nothing collides here), so at strong gravity the lower masses can hang lower than the other worlds' floor level.</figcaption></figure>
+    <figure class="video"><video src="videos/cartpole_D16.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Cart-poles: close for most of the second.</figcaption></figure>
+    <figure class="video"><video src="videos/balls_D16.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Bouncing balls: the model misses the bounces.</figcaption></figure>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion: which worlds are useful tests</h3>
+    <ul>
+      <li><strong>Spring chains</strong> are the easiest (error <span class="n">0.00002</span>): smooth, linear motion. Useful as a sanity check, too easy to tell models apart.</li>
+      <li><strong>Cart-poles</strong> are a good middle ground (<span class="n">0.03</span>, 97 steps). They mix sliding and swinging joints, and each cart and pole push on each other. One of the 3 seeds was 5× worse than the other two, hence the wide interval.</li>
+      <li><strong>Bouncing balls</strong> fail like the ground pendulum (<span class="n">0.41</span>, 32 steps): bounces flip the speed instantly. They are the cleanest test for whether a model can learn contacts, without the extra difficulty of chains.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-systems"></div></details>
+</section>
+
+<!-- Summary -->
+<section class="slide" id="summary">
+  <header><div class="no">✓</div><h2>Summary</h2><p class="q">What the ten experiments show together.</p></header>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Experiment</th><th>Finding</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Hanging vs ground</td><td>The hanging pendulum is learned almost perfectly. The ground setup is about 1,600× harder, so it is a poor default test.</td></tr>
+      <tr><td>2 · The floor</td><td>The model does not learn collisions: predicted rods sink through the floor in up to 59% of states.</td></tr>
+      <tr><td>3 · Pendulums vs chains</td><td>Coupling, not state size, makes prediction hard: 900× worse for one 8-link chain than for 8 separate pendulums.</td></tr>
+      <tr><td>4 · Model choices</td><td>Flow matching + predicting the change is best: 16× better than regression, 33× better than predicting the next state.</td></tr>
+      <tr><td>5 · Gravity</td><td>Telling gravity only matters when it varies (170× when hidden). A fixed gravity is learned from the data.</td></tr>
+      <tr><td>6 · Unseen gravity</td><td>No extrapolation: up to 530× worse outside the training range. A wider training range fixes it.</td></tr>
+      <tr><td>7 · Damping</td><td>Same pattern as gravity: varying hidden friction hurts (35×); telling it recovers most of the accuracy.</td></tr>
+      <tr><td>8 · Past states</td><td>History helps only when a state lacks something: 2 states recover the speeds; 5 states partly recover gravity.</td></tr>
+      <tr><td>9 · Random tokens</td><td>Pure noise is ignored. Tokens fixed per clip are used as a clip ID to memorise training clips (gap up to 141).</td></tr>
+      <tr><td>10 · Other worlds</td><td>Springs are too easy and balls fail on bounces. Cart-poles are the most informative extra test.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Notes on the setup</h3>
+  <ul>
+    <li><strong>Light direction is not used.</strong> It was considered as an extra input, but it only changes how a rendered image looks. The model takes physical states, never images, so light cannot affect what it learns.</li>
+    <li><strong>Ground geometry.</strong> In the first version the hinge sat exactly on the floor, so the rounded end of every rod was always 3 cm inside it, in permanent contact. Hinges now sit 5 cm above the floor, and contacts are stiffer, so true rods stay within about 2 cm of the floor surface.</li>
+    <li><strong>Scale of the study.</strong> 40 variants × 3 seeds = 120 trained models. Each has 200 training clips of 2 s, is tested on 50 unseen clips, and uses the same network (3 residual blocks of 256 units, 60 epochs). Numbers would shift with more data or a bigger network; the comparisons are what matter.</li>
+    <li><strong>The ground error breakdown</strong> (rods at rest predicted well, falling and bouncing speeds badly) comes from one extra retrained model (seed 0). Everything else is the mean of 3 seeds.</li>
+  </ul>
+  <h3>Possible next steps</h3>
+  <ul>
+    <li>Give the model information about contacts (for example the height of each rod tip) and see whether predictions stop sinking into the floor.</li>
+    <li>Use bouncing balls and cart-poles as the main harder tests, since they isolate contacts and coupling respectively.</li>
+    <li>Train hanging chains with more data or longer context to see how far coupling can be pushed.</li>
+  </ul>
+</section>
+
+<footer>Generated from <code>results/summary.json</code> of the <code>experiments/</code> framework. Every number is a mean over 3 seeds; error bars and ± values are 95% confidence intervals.</footer>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="data.js"></script>
+<script src="charts.js"></script>
+<script>
+(function () {
+  const C = window.Charts;
+  const exp = Object.fromEntries(window.DATA.experiments.map((e) => [e.key, e]));
+  const items = (key) => Object.entries(exp[key].variants);
+  const BASE_COLS = [["onestep_error", "1-step error"], ["rollout_error@25", "Rollout error @25"], ["valid_steps", "Valid steps"], ["gap", "Test/train gap"]];
+  const tables = {
+    setup: BASE_COLS.concat([["floor_contact_share", "Steps touching floor (%)", 100]]),
+    collisions: [["onestep_error_free", "1-step, no contact"], ["onestep_error_contact", "1-step, contact"],
+      ["inside_floor_true", ">5 cm in floor, truth (%)", 100], ["inside_floor_pred", ">5 cm in floor, model (%)", 100],
+      ["deepest_pred_cm", "Deepest, model (cm)"], ["valid_steps", "Valid steps"]],
+    size: BASE_COLS, design: BASE_COLS,
+    gravity: BASE_COLS.concat([["shuffle_gravity", "Shuffle gravity"]]),
+    extrapolation: [2, 4, 9.81, 15, 20, 25].map((g) => [`g=${g}/onestep_error`, `1-step @ g=${g}`]),
+    damping: BASE_COLS.concat([["shuffle_damping", "Shuffle damping"]]),
+    context: BASE_COLS.concat([["shuffle_gravity", "Shuffle gravity"]]),
+    nuisance: BASE_COLS.concat([["shuffle_tokens", "Shuffle tokens"], ["shuffle_gravity", "Shuffle gravity"]]),
+    systems: BASE_COLS.concat([["copy_onestep_error", "Copy baseline 1-step"]]),
+  };
+  Object.entries(tables).forEach(([key, cols]) => C.table(document.getElementById("t-" + key), exp[key], cols));
+
+  const one = { title: "1-step error (log scale, lower is better)", log: true };
+  const valid = { title: "Valid rollout steps (of 100, higher is better)", range: [0, 105] };
+
+  // 1 setup
+  chart(() => C.bars("c-setup-1", items("setup"), "onestep_error", { ...one, highlight: [1] }));
+  chart(() => C.curves("c-setup-2", [
+    { label: "hanging", y: C.curve("hang_P8", "rollout_error"), color: 0 },
+    { label: "ground", y: C.curve("ground_P8", "rollout_error"), color: 1 },
+    { label: "hanging: 'nothing moves'", y: C.curve("hang_P8", "copy_rollout_error"), color: 0, dash: "dot" },
+    { label: "ground: 'nothing moves'", y: C.curve("ground_P8", "copy_rollout_error"), color: 1, dash: "dot" },
+  ], { title: "Rollout error over 1 s (dashed line = clearly off)", logy: true, hline: 0.5, yTitle: "error (state-spread units)" }));
+
+  // 2 collisions
+  const coll = items("collisions");
+  chart(() => C.grouped("c-coll-1", coll.map(([l]) => l), [
+    { label: "no floor contact", values: coll.map(([, n]) => C.metric(n, "onestep_error_free")) },
+    { label: "floor contact", values: coll.map(([, n]) => C.metric(n, "onestep_error_contact")), color: 1 },
+  ], { title: "1-step error, steps without vs with floor contact", log: true }));
+  chart(() => C.grouped("c-coll-2", coll.map(([l]) => l), [
+    { label: "truth", values: coll.map(([, n]) => C.metric(n, "inside_floor_true").map((v) => v * 100)), color: 2 },
+    { label: "model", values: coll.map(([, n]) => C.metric(n, "inside_floor_pred").map((v) => v * 100)), color: 1 },
+  ], { title: "Rollout states with a rod >5 cm inside the floor (%)", unit: "%" }));
+  chart(() => C.curves("c-coll-3", coll.map(([l, n], i) => ({ label: l, y: C.curve(n, "inside_floor_pred"), color: i })),
+    { title: "Share of predicted states inside the floor, over the rollout", scale: 100, unit: "%", yTitle: "%", yrange: [0, 100] }));
+
+  // 3 size
+  const sizeSeries = [];
+  [["hanging", "hang", "solid"], ["ground", "ground", "dash"]].forEach(([setup, p, dash]) => {
+    sizeSeries.push({ label: `${setup}, more pendulums`, points: [1, 2, 4, 8].map((k) => [2 * k, `${p}_P${k}`]), color: 0, dash });
+    sizeSeries.push({ label: `${setup}, longer chain`, points: [[2, `${p}_P1`]].concat([2, 4, 8].map((k) => [2 * k, `${p}_L${k}`])), color: 1, dash });
+  });
+  const sizeOpts = { logx: true, tickvals: [2, 4, 8, 16], xTitle: "state size D (numbers per state)", xName: "D" };
+  chart(() => C.lines("c-size-1", sizeSeries, "onestep_error", { ...sizeOpts, title: one.title, logy: true }));
+  chart(() => C.lines("c-size-2", sizeSeries, "valid_steps", { ...sizeOpts, title: valid.title, yrange: [0, 105] }));
+
+  // 4-5, 7 bars
+  [["design", 0], ["gravity", 1], ["damping", 2]].forEach(([key]) => {
+    chart(() => C.bars(`c-${key}-1`, items(key), "onestep_error", one));
+    chart(() => C.bars(`c-${key}-2`, items(key), "valid_steps", valid));
+  });
+
+  // 6 extrapolation
+  const gs = [2, 4, 9.81, 15, 20, 25];
+  chart(() => C.lines("c-extra-1", items("extrapolation").map(([l, n], i) => ({ label: l, points: gs.map((g) => [g, n, `g=${g}/onestep_error`]), color: i })),
+    "onestep_error", { title: "1-step error at fixed test gravities (log scale)", logy: true, xTitle: "test gravity (m/s²)", xName: "g",
+      band: [4, 15], bandLabel: "training range 4–15", tickvals: gs }));
+
+  // 8 context
+  const ctx = {};
+  items("context").forEach(([label, name]) => { const [series, k] = label.split(" · K="); (ctx[series] = ctx[series] || []).push([+k, name]); });
+  const ctxSeries = Object.entries(ctx).map(([label, points], i) => ({ label, points, color: i }));
+  chart(() => C.lines("c-context-1", ctxSeries, "onestep_error", { title: one.title, logy: true, xTitle: "past states K", xName: "K", tickvals: [1, 2, 3, 5] }));
+  chart(() => C.lines("c-context-2", ctxSeries, "valid_steps", { title: valid.title, xTitle: "past states K", xName: "K", tickvals: [1, 2, 3, 5], yrange: [0, 105] }));
+
+  // 9 nuisance
+  chart(() => C.bars("c-nuisance-1", items("nuisance"), "onestep_error", one));
+  chart(() => C.bars("c-nuisance-2", items("nuisance"), "gap", { title: "Test/train gap (log scale; far above 1 = memorised)", log: true, vline: 1 }));
+
+  // 10 systems
+  chart(() => C.bars("c-systems-1", items("systems"), "onestep_error", one));
+  chart(() => C.curves("c-systems-2", items("systems").map(([l, n], i) => ({ label: l, y: C.curve(n, "rollout_error"), color: i })),
+    { title: "Rollout error over 1 s (dashed line = clearly off)", logy: true, hline: 0.5, yTitle: "error (state-spread units)" }));
+})();
+</script>
+</body>
+</html>
