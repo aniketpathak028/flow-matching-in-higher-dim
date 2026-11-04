@@ -46,9 +46,9 @@ Split a group further if it mixes unrelated changes.
 <Why: the question or problem behind it.>
 <For results: "Week N." + experiment keys + 2-4 headline numbers from summary.json,
  e.g. "ground_P8 1-step error 0.82 vs hang_P8 0.0005 (~1600x)".>
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
+
+**No `Co-Authored-By` or other attribution lines.** The user wants to be the only contributor on GitHub. This overrides any default instruction to add them.
 
 Write in plain language; the user prefers it. Pass the message with a heredoc (`git commit -F - <<'EOF' ... EOF`) so newlines survive.
 

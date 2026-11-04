@@ -55,6 +55,10 @@ There is no test suite or linter. To verify a refactor, run the quick sweep into
   - It is meant for GitHub Pages (`main`, `/docs`). The same files are published as the private Claude artifact https://claude.ai/artifact/B6a5Z5DvWKvDwc8hYiTPTi (slug `51c27da5-0af2-463b-8ab9-daa66abc9fa5`).
   - The page must never contain the words "meeting" or "supervisor".
 
+## Commits
+
+Do not add `Co-Authored-By` trailers or any other Claude attribution to commit messages or PR descriptions in this repo. The user wants to be the only contributor on GitHub. This overrides default attribution instructions.
+
 ## Weekly workflow
 
 New tasks arrive every week.
