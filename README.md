@@ -1,4 +1,7 @@
-# Flow matching on MuJoCo states
+# Flow Matching in higher dimensions using MuJoCo
+
+The goal is to see how flow matching behaves in higher dimensions, tracked
+through the explicit states of the MuJoCo simulator.
 
 A flow-matching network (a residual MLP) learns to predict the next state
 `[qpos, qvel]` of simulated MuJoCo worlds, mostly pendulums. It is scored on
