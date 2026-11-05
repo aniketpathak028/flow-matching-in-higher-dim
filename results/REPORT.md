@@ -154,3 +154,20 @@ Mean ± 95% confidence interval over seeds (each seed = new clips + new network 
 | hanging pendulums | `hang_P8` | 16 | 5.09e-04 ± 1.86e-04 | 0.014 ± 0.000 | 100.0 ± 0.0 | 2.697 ± 0.726 | 0.981 ± 0.141 |
 | cart-poles | `cartpole_D16` | 16 | 0.032 ± 0.080 | 0.033 ± 0.014 | 96.8 ± 2.7 | 12.4 ± 28.5 | 0.977 ± 0.136 |
 | bouncing balls | `balls_D16` | 16 | 0.412 ± 0.022 | 0.259 ± 0.033 | 32.1 ± 5.7 | 0.952 ± 0.186 | 0.946 ± 0.056 |
+
+## Scaling the state: 16 to 128 dimensions
+
+*How does the model cope as the state grows from D = 16 to 128, with independent joints and with coupled ones?*
+
+![dimension](figures/dimension.png)
+
+| variant | run | D | 1-step error | rollout error @25 | valid steps | test/train gap |
+|---|---|---|---|---|---|---|
+| separate pendulums · D=16 | `hang_P8` | 16 | 5.09e-04 ± 1.86e-04 | 0.014 ± 0.000 | 100.0 ± 0.0 | 2.697 ± 0.726 |
+| separate pendulums · D=32 | `dim_P16` | 32 | 6.79e-03 ± 2.48e-03 | 0.052 ± 0.004 | 100.0 ± 0.0 | 3.752 ± 1.192 |
+| separate pendulums · D=64 | `dim_P32` | 64 | 0.012 ± 0.003 | 0.072 ± 0.005 | 99.3 ± 1.5 | 2.826 ± 0.433 |
+| separate pendulums · D=128 | `dim_P64` | 128 | 0.025 ± 0.003 | 0.113 ± 0.002 | 92.0 ± 2.9 | 3.159 ± 0.375 |
+| 4-link chains · D=16 | `dim_L4x2` | 16 | 0.238 ± 0.198 | 0.198 ± 0.068 | 65.8 ± 4.2 | 4.847 ± 3.251 |
+| 4-link chains · D=32 | `dim_L4x4` | 32 | 0.327 ± 0.050 | 0.425 ± 0.036 | 35.2 ± 4.3 | 1.827 ± 0.317 |
+| 4-link chains · D=64 | `dim_L4x8` | 64 | 0.663 ± 0.247 | 0.599 ± 0.053 | 22.5 ± 2.5 | 1.625 ± 0.712 |
+| 4-link chains · D=128 | `dim_L4x16` | 128 | 0.712 ± 0.078 | 0.643 ± 0.031 | 20.6 ± 1.8 | 1.264 ± 0.201 |
