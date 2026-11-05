@@ -114,9 +114,9 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
 <div class="wrap">
 
 <div class="title">
-  <div class="kicker">MuJoCo · flow matching · 10 experiments</div>
+  <div class="kicker">MuJoCo · flow matching · 11 experiments</div>
   <h1>Learning pendulum physics with flow matching</h1>
-  <p class="lede">A small network learns to predict the next state of simulated pendulums and related systems. Ten experiments test which setups it handles, which inputs it needs, and where it breaks.</p>
+  <p class="lede">A small network learns to predict the next state of simulated pendulums and related systems. Eleven experiments test which setups it handles, which inputs it needs, and where it breaks.</p>
 </div>
 
 <div class="findings" aria-label="Headline findings">
@@ -138,6 +138,7 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   <a href="#context">8 · Past states</a>
   <a href="#nuisance">9 · Random tokens</a>
   <a href="#systems">10 · Other worlds</a>
+  <a href="#dimension">11 · 16 to 128 dims</a>
   <a href="#summary">Summary</a>
 </nav>
 
@@ -243,9 +244,13 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
     <div class="chart" id="c-size-1"></div>
     <div class="chart" id="c-size-2"></div>
   </div>
-  <div class="grid2" style="margin-top:14px">
-    <figure class="video"><video src="videos/hang_L8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>Hanging chain of 8 links: truth and model drift apart within about 0.4 s.</figcaption></figure>
-    <div class="conclusion" style="margin-top:0">
+  <p class="setup-list" style="margin-top:14px">Same state size D = 16 in both videos, hanging: 8 joints as separate pendulums (left) vs 8 joints coupled in one chain (right).</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/hang_P8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>8 separate pendulums: truth and model stay together for the full second.</figcaption></figure>
+    <figure class="video"><video src="videos/hang_L8.mp4" controls loop muted playsinline preload="auto"></video><figcaption>One chain of 8 links: truth and model drift apart within about 0.4 s.</figcaption></figure>
+  </div>
+  <div>
+    <div class="conclusion">
       <h3>Conclusion</h3>
       <ul>
         <li><strong>Hanging, more pendulums:</strong> error grows from <span class="n">0.00002</span> (D = 2) to <span class="n">0.0005</span> (D = 16), and every rollout stays good for all 100 steps. A bigger state alone is easy.</li>
@@ -264,6 +269,13 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   <div class="grid2">
     <div class="chart" id="c-design-1"></div>
     <div class="chart" id="c-design-2"></div>
+  </div>
+  <p class="setup-list" style="margin-top:14px">The same test clip for all four, truth on the left of each. Watch the last second: the average angle error after 1 s is 0.8°, 4.4°, 7.9° and 64°.</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/hang_P8.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Flow matching · change</strong> (the default): stays on the truth, 0.8° off after 1 s.</figcaption></figure>
+    <figure class="video"><video src="videos/hang_P8_state.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Flow matching · next state</strong>: small but visible lag, 4.4° off after 1 s.</figcaption></figure>
+    <figure class="video"><video src="videos/hang_P8_regression.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Regression · change</strong>: starts well, drifts more over time, 7.9° off after 1 s.</figcaption></figure>
+    <figure class="video"><video src="videos/hang_P8_regression_state.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Regression · next state</strong>: falls apart within a fraction of a second, 64° off after 1 s.</figcaption></figure>
   </div>
   <div class="conclusion">
     <h3>Conclusion</h3>
@@ -284,6 +296,12 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
     <div class="chart" id="c-gravity-1"></div>
     <div class="chart" id="c-gravity-2"></div>
   </div>
+  <p class="setup-list" style="margin-top:14px">Truth on the left of each video. Average angle error after 1 s: 0.6°, 13° and 0.8°.</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/g_fixed_hidden.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Gravity fixed, not told:</strong> stays on the truth (0.6° off after 1 s). This clip has Earth gravity like all its training clips.</figcaption></figure>
+    <figure class="video"><video src="videos/g_hidden.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Gravity varies, not told:</strong> this clip has g = 13.8, above the average the model assumes. Its pendulums swing too slowly and fall behind (13° off after 1 s).</figcaption></figure>
+    <figure class="video"><video src="videos/hang_P8.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Gravity varies, told:</strong> the same clip as in the middle video, now on the truth (0.8° off after 1 s).</figcaption></figure>
+  </div>
   <div class="conclusion">
     <h3>Conclusion</h3>
     <ul>
@@ -301,6 +319,12 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   <header><div class="no">06</div><h2>Gravities outside the training range</h2><p class="q">Does a model trained on gravity 4–15 work at gravity 2, 20 or 25?</p></header>
   <p class="setup-list">Each trained model is tested on clips at six fixed gravities. The shaded band is the 4–15 training range.</p>
   <div class="chart" id="c-extra-1"></div>
+  <p class="setup-list" style="margin-top:14px">All three models on the same clip with gravity 25, outside the 4–15 range of the first model. Average angle error after 0.5 s: 25°, 1.6° and 86°.</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/hang_P8__g25.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Trained on 4–15, told g = 25:</strong> the swings are too slow for this strong gravity; 25° off after 0.5 s.</figcaption></figure>
+    <figure class="video"><video src="videos/g_wide_told__g25.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Trained on 2–25, told g = 25:</strong> inside its range, it stays on the truth (1.6° off).</figcaption></figure>
+    <figure class="video"><video src="videos/g_fixed_hidden__g25.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Trained on Earth gravity only:</strong> plays the motion as if g were 9.81, so it is quickly out of step (86° off after 0.5 s).</figcaption></figure>
+  </div>
   <div class="conclusion">
     <h3>Conclusion</h3>
     <ul>
@@ -338,6 +362,13 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   <div class="grid2">
     <div class="chart" id="c-context-1"></div>
     <div class="chart" id="c-context-2"></div>
+  </div>
+  <p class="setup-list" style="margin-top:14px">Top: angles only, 1 vs 2 past states. Bottom: gravity not told, 1 vs 5 past states. Average angle error after 1 s: 47°, 11°, 13° and 6°.</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/ctx_pos_told_K1.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Angles only, 1 state:</strong> the model cannot see which way the pendulums move; they go wrong at once (68° off after 0.25 s).</figcaption></figure>
+    <figure class="video"><video src="videos/ctx_pos_told_K2.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Angles only, 2 states:</strong> the motion between the two snapshots gives the speed; close to the truth for most of the second (11° off after 1 s).</figcaption></figure>
+    <figure class="video"><video src="videos/g_hidden.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Gravity not told, 1 state:</strong> the pendulums fall behind on this strong-gravity clip (13° off after 1 s).</figcaption></figure>
+    <figure class="video"><video src="videos/ctx_full_hidden_K5.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>Gravity not told, 5 states:</strong> the history reveals part of the gravity, and the error halves (6° off after 1 s).</figcaption></figure>
   </div>
   <div class="conclusion">
     <h3>Conclusion</h3>
@@ -394,9 +425,33 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-systems"></div></details>
 </section>
 
+<section class="slide" id="dimension">
+  <header><div class="no">11</div><h2>Scaling the state: 16 to 128 dimensions</h2><p class="q">How does the model cope as the state grows from D = 16 to 128, with independent joints and with coupled ones?</p></header>
+  <p class="setup-list">Hanging, gravity told, the same network and data size as everywhere else. Separate pendulums: 8, 16, 32 and 64 single pendulums. Coupled: 2, 4, 8 and 16 chains of 4 links. Both have D = 16, 32, 64 and 128 numbers per state.</p>
+  <div class="grid2">
+    <div class="chart" id="c-dim-1"></div>
+    <div class="chart" id="c-dim-2"></div>
+  </div>
+  <p class="setup-list" style="margin-top:14px">Both at D = 128. Average angle error after 1 s: 15° for the separate pendulums, 66° for the chains.</p>
+  <div class="grid2">
+    <figure class="video"><video src="videos/dim_P64.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>64 separate pendulums:</strong> most stay close to the truth; small lags build up over the second.</figcaption></figure>
+    <figure class="video"><video src="videos/dim_L4x16.mp4" controls loop muted playsinline preload="auto"></video><figcaption><strong>16 chains of 4 links:</strong> the chains fold the wrong way within a fraction of a second.</figcaption></figure>
+  </div>
+  <div class="conclusion">
+    <h3>Conclusion</h3>
+    <ul>
+      <li><strong>Separate pendulums degrade slowly.</strong> The 1-step error grows from <span class="n">0.0005</span> at D = 16 to <span class="n">0.025</span> at D = 128 (about 50×), but rollouts stay useful: 92 of 100 steps are still valid at D = 128.</li>
+      <li><strong>This is a capacity limit, not memorising.</strong> The training error grows just as much and the test/train gap stays near 3. The same 256-unit network has to learn 64 copies of one pendulum separately; it does not know they are identical. It also leans less on gravity as D grows (scrambling gravity raises the error 216× at D = 16, only 3× at D = 128).</li>
+      <li><strong>Coupled chains are bad from the start and get worse.</strong> Error <span class="n">0.24</span> at D = 16 rising to <span class="n">0.71</span> at D = 128; rollouts drop from 66 to 21 valid steps. Even two independent 4-link chains are 3× worse than one (<span class="n">0.074</span>). These models also ignore gravity completely.</li>
+      <li>Growing the state hurts much less than coupling does. At D = 128 the separate pendulums are still about 30× better than the chains. Two natural next steps: a bigger network, or one that shares weights across identical units.</li>
+    </ul>
+  </div>
+  <details class="numbers"><summary>Show numbers</summary><div class="table-wrap" id="t-dimension"></div></details>
+</section>
+
 <!-- Summary -->
 <section class="slide" id="summary">
-  <header><div class="no">✓</div><h2>Summary</h2><p class="q">What the ten experiments show together.</p></header>
+  <header><div class="no">✓</div><h2>Summary</h2><p class="q">What the eleven experiments show together.</p></header>
   <div class="table-wrap"><table>
     <thead><tr><th>Experiment</th><th>Finding</th></tr></thead>
     <tbody>
@@ -410,21 +465,34 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
       <tr><td>8 · Past states</td><td>History helps only when a state lacks something: 2 states recover the speeds; 5 states partly recover gravity.</td></tr>
       <tr><td>9 · Random tokens</td><td>Pure noise is ignored. Tokens fixed per clip are used as a clip ID to memorise training clips (gap up to 141).</td></tr>
       <tr><td>10 · Other worlds</td><td>Springs are too easy and balls fail on bounces. Cart-poles are the most informative extra test.</td></tr>
+      <tr><td>11 · 16 to 128 dims</td><td>Separate pendulums degrade slowly with size (about 50× from D = 16 to 128, still 92 good steps). Coupled chains are bad at every size and about 30× worse at D = 128.</td></tr>
     </tbody>
   </table></div>
+  <h3>Main takeaways</h3>
+  <ol>
+    <li><strong>Smooth physics is easy, at any size.</strong> Swinging, springs and gravity are learned well, even with 128 numbers per state.</li>
+    <li><strong>Coupling and contacts are hard.</strong> Chains of joints and collisions with floors or walls are where the model breaks. It never learns a "can't go there" rule.</li>
+    <li><strong>The model needs to see every factor that varies.</strong> A hidden factor that changes between clips (gravity, friction) costs a lot; past snapshots only partly make up for it.</li>
+    <li><strong>It does not extrapolate.</strong> It only works inside the range of conditions it was trained on.</li>
+    <li><strong>It memorises when given a shortcut.</strong> Anything constant within a clip and unique to it becomes a clip ID.</li>
+    <li><strong>At high D the limit is capacity, not memorising.</strong> A fixed-size network learns every identical pendulum separately.</li>
+  </ol>
   <h3>Notes on the setup</h3>
   <ul>
     <li><strong>Light direction is not used.</strong> It was considered as an extra input, but it only changes how a rendered image looks. The model takes physical states, never images, so light cannot affect what it learns.</li>
     <li><strong>Ground geometry.</strong> In the first version the hinge sat exactly on the floor, so the rounded end of every rod was always 3 cm inside it, in permanent contact. Hinges now sit 5 cm above the floor, and contacts are stiffer, so true rods stay within about 2 cm of the floor surface.</li>
-    <li><strong>Scale of the study.</strong> 40 variants × 3 seeds = 120 trained models. Each has 200 training clips of 2 s, is tested on 50 unseen clips, and uses the same network (3 residual blocks of 256 units, 60 epochs). Numbers would shift with more data or a bigger network; the comparisons are what matter.</li>
+    <li><strong>Scale of the study.</strong> 47 variants × 3 seeds = 141 trained models. Each has 200 training clips of 2 s, is tested on 50 unseen clips, and uses the same network (3 residual blocks of 256 units, 60 epochs). Numbers would shift with more data or a bigger network; the comparisons are what matter.</li>
     <li><strong>The ground error breakdown</strong> (rods at rest predicted well, falling and bouncing speeds badly) comes from one extra retrained model (seed 0). Everything else is the mean of 3 seeds.</li>
   </ul>
-  <h3>Possible next steps</h3>
-  <ul>
-    <li>Give the model information about contacts (for example the height of each rod tip) and see whether predictions stop sinking into the floor.</li>
-    <li>Use bouncing balls and cart-poles as the main harder tests, since they isolate contacts and coupling respectively.</li>
-    <li>Train hanging chains with more data or longer context to see how far coupling can be pushed.</li>
-  </ul>
+  <h3>Next steps</h3>
+  <ol>
+    <li><strong>Share weights across identical parts.</strong> One small network applied to every pendulum or link, with message passing between neighbouring links for chains. Separate pendulums should then cost almost nothing extra as D grows; it may also help chains.</li>
+    <li><strong>Separate capacity from data at D = 128.</strong> Grow the network (256 → 512 → 1024 units) and, separately, the data (200 → 800 clips), to see which one the high-D drop comes from.</li>
+    <li><strong>Push the dimension higher:</strong> D = 256, 512 and 1024 with separate pendulums, towards the original goal of up to 1024 links.</li>
+    <li><strong>Represent angles as sine and cosine.</strong> A raw angle jumps at ±180° although the position is the same; sin/cos removes that artificial jump. Cheap to try on chains and cart-poles, whose poles swing all the way round.</li>
+    <li><strong>Train on multi-step rollouts.</strong> Score training over 5–10 chained predictions, not one step, so the model learns to correct its own drift.</li>
+    <li><strong>Give the model contact information</strong>, such as each rod tip's height above the floor, and test whether ground pendulums and bouncing balls stop sinking through the floor.</li>
+  </ol>
 </section>
 
 <footer>Generated from <code>results/summary.json</code> of the <code>experiments/</code> framework. Every number is a mean over 3 seeds; error bars and ± values are 95% confidence intervals.</footer>
@@ -451,6 +519,7 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
     context: BASE_COLS.concat([["shuffle_gravity", "Shuffle gravity"]]),
     nuisance: BASE_COLS.concat([["shuffle_tokens", "Shuffle tokens"], ["shuffle_gravity", "Shuffle gravity"]]),
     systems: BASE_COLS.concat([["copy_onestep_error", "Copy baseline 1-step"]]),
+    dimension: BASE_COLS.concat([["shuffle_gravity", "Shuffle gravity"]]),
   };
   Object.entries(tables).forEach(([key, cols]) => C.table(document.getElementById("t-" + key), exp[key], cols));
 
@@ -516,6 +585,13 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
   chart(() => C.bars("c-systems-1", items("systems"), "onestep_error", one));
   chart(() => C.curves("c-systems-2", items("systems").map(([l, n], i) => ({ label: l, y: C.curve(n, "rollout_error"), color: i })),
     { title: "Rollout error over 1 s (dashed line = clearly off)", logy: true, hline: 0.5, yTitle: "error (state-spread units)" }));
+  // 11 dimension
+  const dims = {};
+  items("dimension").forEach(([label, name]) => { const [series, d] = label.split(" · D="); (dims[series] = dims[series] || []).push([+d, name]); });
+  const dimSeries = Object.entries(dims).map(([label, points], i) => ({ label, points, color: i }));
+  const dimOpts = { logx: true, tickvals: [16, 32, 64, 128], xTitle: "state size D (numbers per state)", xName: "D" };
+  chart(() => C.lines("c-dim-1", dimSeries, "onestep_error", { ...dimOpts, title: one.title, logy: true }));
+  chart(() => C.lines("c-dim-2", dimSeries, "valid_steps", { ...dimOpts, title: valid.title, yrange: [0, 105] }));
 })();
 </script>
 </body>
