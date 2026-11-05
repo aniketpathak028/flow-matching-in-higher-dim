@@ -66,7 +66,25 @@ def _world(name: str, timestep: float, bodies: str, floor_size: float, solid_flo
     """
 
 
-def _pendulum_xml(count: int, links: int, ground: bool) -> str:
+def _hanging_grid(count: int, links: int, stacked: bool) -> tuple[int, int, float]:
+    """(columns, rows, row spacing) for hanging pendulums.
+
+    Simulation always uses one row. For videos (`stacked`), more than 8 units are stacked in
+    rows so they stay readable. Nothing collides in the hanging world, so the layout does not
+    change the motion; it only shifts floating-point rounding, which is why it is kept out of
+    the simulation (cached clips stay bit-identical).
+    """
+    chain = LINK_LENGTH * links
+    row_spacing = 2 * chain + 0.15
+    if count <= 8 or not stacked:
+        return count, 1, row_spacing
+    width = 2 * chain + 0.05
+    shapes = [(c, -(-count // c)) for c in range(1, count + 1)]
+    cols, rows = min(shapes, key=lambda cr: abs(np.log(cr[0] * width / (cr[1] * row_spacing) / 1.6)))
+    return cols, rows, row_spacing
+
+
+def _pendulum_xml(count: int, links: int, ground: bool, stacked: bool = False) -> str:
     """Hanging (rods point down from a raised mount) or ground (rods point up from the floor)."""
     chain = LINK_LENGTH * links
     sign = 1 if ground else -1                       # +1: links point up, -1: links point down
@@ -76,8 +94,14 @@ def _pendulum_xml(count: int, links: int, ground: bool) -> str:
     # Rods only collide with the floor (contype 2 / conaffinity 1), never with each other.
     rod_contact = 'contype="2" conaffinity="1" solref="0.005 1"' if ground else 'contype="0" conaffinity="0"'
     parts = []
-    for i, x in enumerate(_row(count, spacing=2 * chain + 0.05)):
-        xml = (f'<body name="mount_{i}" pos="{x} 0 {height}">'
+    if ground:
+        places = [(x, height) for x in _row(count, spacing=2 * chain + 0.05)]
+    else:
+        cols, rows, row_spacing = _hanging_grid(count, links, stacked)
+        xs = _row(cols, spacing=2 * chain + 0.05)
+        places = [(xs[i % cols], height + (rows - 1 - i // cols) * row_spacing) for i in range(count)]
+    for i, (x, z) in enumerate(places):
+        xml = (f'<body name="mount_{i}" pos="{x} 0 {z}">'
                f'<geom type="cylinder" size="0.05 0.03" euler="90 0 0" rgba="0.25 0.27 0.3 1" contype="0" conaffinity="0"/>')
         for k in range(links):
             pos = "0 0 0" if k == 0 else f"0 0 {sign * LINK_LENGTH}"
@@ -151,7 +175,7 @@ class SimEnv:
             raise ValueError("count and links must be positive.")
         self.system, self.count, self.links = system, count, links
         xml = {
-            "pendulum": lambda: _pendulum_xml(count, links, ground=False),
+            "pendulum": lambda: _pendulum_xml(count, links, ground=False, stacked=img_size is not None),
             "ground": lambda: _pendulum_xml(count, links, ground=True),
             "spring_chain": lambda: _spring_chain_xml(count, links),
             "cartpole": lambda: _cartpole_xml(count),
@@ -238,7 +262,9 @@ class SimEnv:
         chain = LINK_LENGTH * self.links
         row = lambda spacing, size: (self.count - 1) * spacing / 2 + size
         if self.system == "pendulum":     # mount at chain + 0.2, chains can swing up to 2 * chain + 0.2
-            return row(2 * chain + 0.05, chain), 0.0, 2 * chain + 0.25, -6
+            cols, rows, row_spacing = _hanging_grid(self.count, self.links, self.img_size is not None)
+            half = (cols - 1) * (2 * chain + 0.05) / 2 + chain
+            return half, 0.0, 2 * chain + 0.25 + (rows - 1) * row_spacing, -6
         if self.system == "ground":       # rods lie on the floor or stand up to `chain`
             return row(2 * chain + 0.05, chain), -0.25, chain + 0.1, -12
         if self.system == "spring_chain":
