@@ -136,6 +136,18 @@ def figure(table: dict, exp: Experiment, path: Path) -> None:
         for ax in axes:
             ax.set_xscale("log", base=2)
         axes[0].legend(fontsize=8)
+    elif key == "dimension":
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+        groups = defaultdict(list)
+        for label, name in exp.variants.items():
+            series, d = label.rsplit(" · D=", 1)
+            groups[series].append((int(d), name))
+        _lines(axes[0], table, groups, "onestep_error", "1-step error", "state dimension D")
+        _lines(axes[1], table, groups, "valid_steps", "Valid rollout steps (of 100)", "state dimension D", log=False)
+        for ax in axes:
+            ax.set_xscale("log", base=2)
+            ax.set_xticks([16, 32, 64, 128], ["16", "32", "64", "128"])
+        axes[0].legend(fontsize=8)
     elif key == "context":
         fig, axes = plt.subplots(1, 2, figsize=(11, 4))
         groups = defaultdict(list)

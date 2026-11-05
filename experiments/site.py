@@ -5,7 +5,7 @@
 
 What it does:
 * results/summary.json      -> docs/data.js   (as `window.DATA = {...};`, read by docs/charts.js)
-* results/videos/<v>.mp4    -> docs/videos/   (every variant in plan.VIDEOS)
+* results/videos/<v>.mp4    -> docs/videos/   (every entry of plan.VIDEOS)
 
 docs/index.html (the text, charts and conclusions) is written by hand; this
 script only refreshes the numbers and videos it shows. Run `python -m
@@ -17,7 +17,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from experiments.plan import VIDEOS
+from experiments.plan import video_jobs
 
 SITE = Path("docs")
 
@@ -31,13 +31,14 @@ def build_site(out_root: Path, site: Path = SITE) -> None:
 
     (site / "videos").mkdir(exist_ok=True)
     missing = []
-    for name in VIDEOS:
-        video = out_root / "videos" / f"{name}.mp4"
+    jobs = video_jobs()
+    for _, _, file in jobs:
+        video = out_root / "videos" / file
         if video.exists():
-            shutil.copy2(video, site / "videos" / video.name)
+            shutil.copy2(video, site / "videos" / file)
         else:
-            missing.append(name)
-    print(f"Wrote {site / 'data.js'} and {len(VIDEOS) - len(missing)} videos to {site / 'videos'}.")
+            missing.append(file)
+    print(f"Wrote {site / 'data.js'} and {len(jobs) - len(missing)} videos to {site / 'videos'}.")
     if missing:
         print(f"Missing videos (run `python -m experiments.run` to render them): {', '.join(missing)}")
 
