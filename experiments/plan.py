@@ -1,4 +1,4 @@
-"""The experiment plan: every variant that is trained, and the 10 experiments that compare them.
+"""The experiment plan: every variant that is trained, and the 11 experiments that compare them.
 
 A variant is a name plus the settings that differ from RunConfig's defaults
 (8 hanging single pendulums, gravity told, flow matching, predict the change).
@@ -59,6 +59,9 @@ VARIANTS: dict[str, dict] = {
     "spring_D16": dict(system="spring_chain", count=4, links=2),
     "cartpole_D16": dict(system="cartpole", count=4),
     "balls_D16": dict(system="balls", count=4),
+    # --- scaling the state: D = 16, 32, 64, 128 (hang_P8 and dim_L4x2 are the D = 16 points)
+    **{f"dim_P{p}": dict(count=p) for p in (16, 32, 64)},
+    **{f"dim_L4x{c}": dict(count=c, links=4) for c in (2, 4, 8, 16)},
 }
 
 
@@ -115,10 +118,30 @@ EXPERIMENTS = [
                "How do springs, cart-poles and bouncing balls compare to the hanging pendulum at the same D?",
                {"spring chains": "spring_D16", "hanging pendulums": "hang_P8", "cart-poles": "cartpole_D16",
                 "bouncing balls": "balls_D16"}),
+    Experiment("dimension", "Scaling the state: 16 to 128 dimensions",
+               "How does the model cope as the state grows from D = 16 to 128, with independent joints and with coupled ones?",
+               {**{f"separate pendulums · D={2 * p}": ("hang_P8" if p == 8 else f"dim_P{p}") for p in (8, 16, 32, 64)},
+                **{f"4-link chains · D={8 * c}": f"dim_L4x{c}" for c in (2, 4, 8, 16)}}),
 ]
 
-# Variants that get a side-by-side video (seed 0).
-VIDEOS = ("hang_P8", "ground_P8", "hang_L8", "ground_L8", "spring_D16", "cartpole_D16", "balls_D16")
+# Side-by-side videos (seed 0). "variant" shows its first test clip; "variant@g=25" shows the
+# first clip of an extra test set (see eval_gravities).
+VIDEOS = ("hang_P8", "ground_P8", "hang_L8", "ground_L8", "spring_D16", "cartpole_D16", "balls_D16",
+          "hang_P8_state", "hang_P8_regression", "hang_P8_regression_state",
+          "g_hidden", "g_fixed_hidden",
+          "hang_P8@g=25", "g_wide_told@g=25", "g_fixed_hidden@g=25",
+          "ctx_pos_told_K1", "ctx_pos_told_K2", "ctx_full_hidden_K5",
+          "dim_P64", "dim_L4x16")
+
+
+def video_jobs() -> list[tuple[str, str, str]]:
+    """(variant, test set, file name) for every entry of VIDEOS, e.g. ("hang_P8", "g=25", "hang_P8__g25.mp4")."""
+    jobs = []
+    for entry in VIDEOS:
+        name, _, split = entry.partition("@")
+        suffix = "__" + split.replace("=", "").replace(".", "_") if split else ""
+        jobs.append((name, split or "test", f"{name}{suffix}.mp4"))
+    return jobs
 
 
 def build_runs(seeds: list[int], only: list[str] | None = None, overrides: dict | None = None,

@@ -28,7 +28,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from experiments.config import RunConfig
-from experiments.plan import EXPERIMENTS, VIDEOS, build_runs
+from experiments.plan import EXPERIMENTS, build_runs, video_jobs
 
 
 def _worker_init(threads: int) -> None:
@@ -110,11 +110,12 @@ def main() -> None:
         seed = min(args.seeds)
         for cfg in configs:
             run_dir = out_root / "runs" / cfg.run_id
-            video = out_root / "videos" / f"{cfg.name}.mp4"
-            if cfg.name in VIDEOS and cfg.seed == seed and (run_dir / "metrics.json").exists() \
-                    and (args.force or not video.exists()):
-                render_video(cfg, run_dir, video)
-                print(f"video: {video}")
+            for name, split, file in video_jobs():
+                video = out_root / "videos" / file
+                if name == cfg.name and cfg.seed == seed and (run_dir / "metrics.json").exists() \
+                        and (args.force or not video.exists()):
+                    render_video(cfg, run_dir, video, split=split)
+                    print(f"video: {video}")
 
     from experiments.report import build_report
     build_report(out_root)
