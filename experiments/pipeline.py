@@ -65,22 +65,29 @@ def run_experiment(cfg: RunConfig, out_dir: Path, cache_dir: Path, device: str =
     return result
 
 
-def render_video(cfg: RunConfig, run_dir: Path, path: Path, fps: int = 25) -> None:
-    """Side-by-side video of the true (left) and predicted (right) rollout of the first test clip.
+def render_video(cfg: RunConfig, run_dir: Path, path: Path, fps: int = 25, split: str = "test") -> None:
+    """Side-by-side video of the true (left) and predicted (right) rollout of the first clip of `split`.
 
     The rollout is 100 steps = 1 s of simulated time, shown at 25 frames/s (4x slow motion).
+    `split` is "test" or an extra test set such as "g=25".
     """
     import mediapy
 
     with np.load(run_dir / "curves.npz") as c:
-        truth, pred = c["test/truth_first"], c["test/pred_first"]
+        truth, pred = c[f"{split}/truth_first"], c[f"{split}/pred_first"]
+    if cfg.obs == "positions":
+        # Positions-only models predict angles only; speeds do not change the picture.
+        truth, pred = (np.concatenate([x, np.zeros_like(x)], axis=1) for x in (truth, pred))
+    model_label = "Flow-matching model" if cfg.model == "fm" else "Regression model"
+    if cfg.target == "state":
+        model_label += " (next state)"
     env = SimEnv(cfg.system, cfg.count, cfg.links, img_size=(640, 400))
     font = ImageFont.load_default(size=22)
     path.parent.mkdir(parents=True, exist_ok=True)
     with mediapy.VideoWriter(str(path), shape=(400, 1280), fps=fps) as writer:
         for step in range(len(truth)):
             panels = []
-            for state, label in ((truth[step], "MuJoCo (truth)"), (pred[step], "Flow-matching model")):
+            for state, label in ((truth[step], "MuJoCo (truth)"), (pred[step], model_label)):
                 image = Image.fromarray(env.render(state))
                 draw = ImageDraw.Draw(image)
                 draw.rectangle((0, 0, image.width, 34), fill=(24, 32, 38))

@@ -168,6 +168,8 @@ def evaluate(data: PreparedData, model: DynamicsMLP) -> tuple[dict, dict]:
         metrics[f"{p}valid_steps"] = float(roll["valid_steps"].mean())
         curves[f"{split}/rollout_error"] = roll["error"].mean(0)
         curves[f"{split}/copy_rollout_error"] = roll["copy_error"].mean(0)
+        curves[f"{split}/pred_first"] = roll["pred"][0]     # first clip of every set, for videos
+        curves[f"{split}/truth_first"] = roll["truth"][0]
         if split != "test":
             continue
 
@@ -186,6 +188,4 @@ def evaluate(data: PreparedData, model: DynamicsMLP) -> tuple[dict, dict]:
             floor_metrics, floor_curves = _floor_check(data, roll, sq, n_idx, t_idx)
             metrics.update(floor_metrics)
             curves.update({f"test/{k}": v for k, v in floor_curves.items()})
-        curves["test/pred_first"] = roll["pred"][0]     # first test clip, for the video
-        curves["test/truth_first"] = roll["truth"][0]
     return metrics, curves
