@@ -15,7 +15,7 @@ Setup: `python3 -m venv .venv && source .venv/bin/activate && pip install -r req
 Run from the repo root as modules:
 
 ```bash
-python -m experiments.run                                  # all 10 experiments × seeds 0 1 2 (120 runs, ~1 h), resumable
+python -m experiments.run                                  # all 11 experiments × seeds 0 1 2 (141 runs, ~1.5 h), resumable
 python -m experiments.run --only setup collisions          # selected experiments (keys in plan.EXPERIMENTS)
 python -m experiments.run --quick --out <dir> --seeds 0    # smoke test, under a minute
 python -m experiments.run --set epochs=100                 # override any RunConfig field
@@ -31,8 +31,8 @@ There is no test suite or linter. To verify a refactor, run the quick sweep into
 
 - **`plan.py` is the single source of what runs.**
   - `VARIANTS` maps a unique name to its changes from the `RunConfig` defaults. The default is 8 hanging single pendulums, gravity told, flow matching, `target="delta"`.
-  - `EXPERIMENTS` (10 of them) only reference variant names, so a shared variant (e.g. `hang_P8`) is trained once.
-  - `VIDEOS` lists the variants that get a rollout video.
+  - `EXPERIMENTS` (11 of them) only reference variant names, so a shared variant (e.g. `hang_P8`) is trained once.
+  - `VIDEOS` lists the variants that get a rollout video (seed 0). `"name@g=25"` renders the first clip of an extra test set instead; `video_jobs()` turns entries into file names (`name__g25.mp4`).
 - **Outputs:** runs live in `results/runs/<name>__seed<k>/`. `metrics.json` is written last and marks a run complete; `run.py` skips runs that already have one.
   - Only `results/REPORT.md`, `results/figures/` and `results/summary.json` are committed. Datasets, runs and result videos are gitignored; videos are tracked only as copies in `docs/videos/`.
 - **Pipeline:** `pipeline.run_experiment` runs `data.load_datasets` → `data.PreparedData` → `model.train` → `evaluate.evaluate`. `pipeline.render_video` renders from the saved `curves.npz`.
@@ -48,6 +48,7 @@ There is no test suite or linter. To verify a refactor, run the quick sweep into
   - `collect_trajectories` redraws a start if MuJoCo reports instability.
   - Spring chains have no floor at all: nothing collides there, and at strong gravity the masses hang below floor level.
   - Units are laid out in one row along x. The camera is fitted to `SimEnv._view_box()`.
+  - Only for rendering (`SimEnv(img_size=...)`), hanging worlds with more than 8 units are stacked in rows (`_hanging_grid`). Simulation keeps the single row: the layout does not change the motion, but it shifts float rounding, and the cached clips must stay bit-identical.
 - **Report:** `report.py` aggregates the seeds (mean ± 95% Student-t CI) into `results/REPORT.md`, `results/figures/<key>.png` and `results/summary.json`.
 - **Website (`docs/`):**
   - `index.html` is hand-written: sections, conclusions and the chart calls. `charts.js` holds the Plotly helpers.

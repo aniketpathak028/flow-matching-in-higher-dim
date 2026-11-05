@@ -6,7 +6,7 @@ through the explicit states of the MuJoCo simulator.
 A flow-matching network (a residual MLP) learns to predict the next state
 `[qpos, qvel]` of simulated MuJoCo worlds, mostly pendulums. It is scored on
 one-step error and on 100-step rollouts where it runs on its own predictions.
-Ten experiments compare setups, model choices and inputs.
+Eleven experiments compare setups, model choices, inputs and state sizes up to D = 128.
 
 ## Setup
 
@@ -19,7 +19,7 @@ pip install -r requirements.txt     # video rendering also needs ffmpeg (brew in
 ## Run
 
 ```bash
-python -m experiments.run                                  # all 10 experiments, seeds 0 1 2 (~1 h, resumable)
+python -m experiments.run                                  # all 11 experiments, seeds 0 1 2 (~1.5 h, resumable)
 python -m experiments.run --only setup collisions          # selected experiments
 python -m experiments.run --quick --out /tmp/q --seeds 0   # tiny smoke test, under a minute
 python -m experiments.run --set epochs=100                 # override any RunConfig field
@@ -52,7 +52,7 @@ every experiment. `python -m experiments.site` refreshes its numbers
 It is a static page, so it can be served as is, e.g. by GitHub Pages from `/docs`.
 Check it without a browser with `node scripts/check_site.js docs`.
 
-## The 10 experiments
+## The 11 experiments
 
 | Key | Question |
 |---|---|
@@ -66,6 +66,7 @@ Check it without a browser with `node scripts/check_site.js docs`.
 | `context` | Do 2–5 past states help, and when? |
 | `nuisance` | Does the model ignore meaningless random inputs, or learn from them? |
 | `systems` | Spring chains, cart-poles and bouncing balls compared to the hanging pendulum at the same state size |
+| `dimension` | Growing the state from D = 16 to 128: separate pendulums vs 4-link chains |
 
 Each variant is defined once in `experiments/plan.py` and trained once per
 seed, even when several experiments compare it. A plain-language walkthrough

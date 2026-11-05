@@ -16,7 +16,7 @@ plays the physics forward on its own. That is a **rollout**.
 | `data.py` | simulate clips (or load them from the cache), scale them, cut them into (input, answer) pairs |
 | `model.py` | the residual MLP, flow-matching training and prediction |
 | `evaluate.py` | one-step error, rollouts, shuffle test, train/test gap, floor check |
-| `plan.py` | every variant and the 10 experiments that compare them |
+| `plan.py` | every variant and the 11 experiments that compare them |
 | `systems.py` | the MuJoCo worlds: hanging and ground pendulums, springs, cart-poles, balls |
 | `run.py` | command line: trains missing runs in parallel, renders videos, builds the report |
 | `report.py` | averages seeds into figures, `REPORT.md` and `summary.json` |
