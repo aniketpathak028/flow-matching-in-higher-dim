@@ -64,12 +64,22 @@ def _error(sq: torch.Tensor, data: PreparedData) -> float:
     return (sq.mean(0) / data.delta_var).mean().item()
 
 
+def _example_cap(data: PreparedData, flat_cap: int) -> int:
+    """How many examples to score. The per-unit network runs once per unit, so for it the cap
+    shrinks with the number of units (but never below 1/8 of the flat cap); 1,250 examples of
+    256 pendulums are still 320,000 pendulum predictions."""
+    if data.cfg.arch != "units":
+        return flat_cap
+    return max(flat_cap // 8, flat_cap * 8 // data.cfg.count)
+
+
 def _eval_examples(data: PreparedData, split: str, seed: int):
     """The (clip, step) pairs used for one-step scoring; a fixed random subset if there are many."""
     n_idx, t_idx = data.examples(split, t_min=MAX_CONTEXT - 1)
-    if len(n_idx) > MAX_EVAL_EXAMPLES:
+    cap = _example_cap(data, MAX_EVAL_EXAMPLES)
+    if len(n_idx) > cap:
         g = torch.Generator(device="cpu").manual_seed(seed)
-        keep = torch.randperm(len(n_idx), generator=g)[:MAX_EVAL_EXAMPLES].to(data.device)
+        keep = torch.randperm(len(n_idx), generator=g)[:cap].to(data.device)
         n_idx, t_idx = n_idx[keep], t_idx[keep]
     return n_idx, t_idx
 
@@ -110,16 +120,31 @@ def _rollout(data: PreparedData, model: DynamicsMLP, split: str, seed: int) -> d
             "pred": pred.cpu().numpy(), "truth": truth.cpu().numpy()}
 
 
-def _floor_check(data: PreparedData, roll: dict, sq: torch.Tensor, n_idx, t_idx) -> tuple[dict, dict]:
+def _lowest(data: PreparedData, split: str, states: np.ndarray, clips: np.ndarray) -> np.ndarray:
+    """Lowest rod point of each state. When rod lengths/masses vary, each clip uses its own rods."""
     cfg = data.cfg
-    env = SimEnv(cfg.system, cfg.count, cfg.links)
+    params = data.split[split].params
+    if not params:
+        return SimEnv(cfg.system, cfg.count, cfg.links).lowest_point(states)
+    out = np.empty(len(states))
+    for n in np.unique(clips):
+        sel = clips == n
+        env = SimEnv(cfg.system, cfg.count, cfg.links, lengths=params["length"][n] if "length" in params else None,
+                     masses=params["mass"][n] if "mass" in params else None)
+        out[sel] = env.lowest_point(states[sel])
+    return out
+
+
+def _floor_check(data: PreparedData, roll: dict, sq: torch.Tensor, n_idx, t_idx) -> tuple[dict, dict]:
     n_traj, horizon, _ = roll["pred"].shape
-    low_pred = env.lowest_point(roll["pred"].reshape(n_traj * horizon, -1)).reshape(n_traj, horizon)
-    low_true = env.lowest_point(roll["truth"].reshape(n_traj * horizon, -1)).reshape(n_traj, horizon)
+    clips = np.repeat(np.arange(n_traj), horizon)
+    low_pred = _lowest(data, "test", roll["pred"].reshape(n_traj * horizon, -1), clips).reshape(n_traj, horizon)
+    low_true = _lowest(data, "test", roll["truth"].reshape(n_traj * horizon, -1), clips).reshape(n_traj, horizon)
     # One-step examples: was a rod touching the floor at the start or the end of the step?
     obs = data.split["test"].obs
-    low_t = env.lowest_point(obs[n_idx, t_idx].cpu().numpy())
-    low_t1 = env.lowest_point(obs[n_idx, t_idx + 1].cpu().numpy())
+    ex_clips = n_idx.cpu().numpy()
+    low_t = _lowest(data, "test", obs[n_idx, t_idx].cpu().numpy(), ex_clips)
+    low_t1 = _lowest(data, "test", obs[n_idx, t_idx + 1].cpu().numpy(), ex_clips)
     contact = torch.from_numpy(np.minimum(low_t, low_t1) < TOUCHING).to(sq.device)
     metrics = {
         "floor_contact_share": float(contact.float().mean()),
@@ -134,6 +159,56 @@ def _floor_check(data: PreparedData, roll: dict, sq: torch.Tensor, n_idx, t_idx)
               "inside_floor_true": (low_true < INSIDE_FLOOR).mean(0),
               "lowest_pred_first": low_pred[0], "lowest_true_first": low_true[0]}
     return metrics, curves
+
+
+TRACK_EXAMPLES = 500       # examples per set used to follow progress during training
+
+
+class TrainingTracker:
+    """Measures the model on fixed training and test examples during training (see model.train).
+
+    For each checkpoint epoch it records
+    * loss (train / test): the training objective on fixed examples with fixed noise, so the two
+      are directly comparable and do not jump around from batch to batch;
+    * 1-step error (train / test), as defined at the top of this file, on TRACK_EXAMPLES examples.
+    It uses its own random generators, so tracking does not change the training run.
+    """
+
+    def __init__(self, data: PreparedData):
+        self.data = data
+        cfg = data.cfg
+        self.history: dict[str, list[float]] = {k: [] for k in
+                                                ("epoch", "train_loss", "test_loss", "train_onestep", "test_onestep")}
+        self.sets = {}
+        for i, split in enumerate(("train", "test")):
+            n_idx, t_idx = data.examples(split, t_min=MAX_CONTEXT - 1)
+            g = torch.Generator(device="cpu").manual_seed(cfg.seed + 21 + i)
+            keep = torch.randperm(len(n_idx), generator=g)[:_example_cap(data, TRACK_EXAMPLES)].to(data.device)
+            n_idx, t_idx = n_idx[keep], t_idx[keep]
+            k = len(n_idx)
+            self.sets[split] = dict(
+                n=n_idx, t=t_idx,
+                noise=torch.randn(k, data.obs_dim, generator=g).to(data.device),        # for 1-step predictions
+                x0=torch.randn(k, data.obs_dim, generator=g).to(data.device),           # for the loss
+                tau=torch.rand(k, 1, generator=g).to(data.device))
+
+    @torch.no_grad()
+    def __call__(self, epoch: int, model) -> None:
+        was_training = model.training
+        model.eval()
+        self.history["epoch"].append(epoch)
+        for split, s in self.sets.items():
+            context, cond, target = self.data.batch(split, s["n"], s["t"])
+            if model.flow:
+                x0 = s["x0"] if self.data.cfg.noise_scale == 1.0 else s["x0"] * self.data.cfg.noise_scale
+                x_tau = (1 - s["tau"]) * x0 + s["tau"] * target
+                loss = torch.mean((model(context, cond, tau=s["tau"], x_tau=x_tau) - (target - x0)) ** 2)
+            else:
+                loss = torch.mean((model(context, cond) - target) ** 2)
+            self.history[f"{split}_loss"].append(loss.item())
+            sq = _one_step_sq_errors(self.data, model, split, s["n"], s["t"], s["noise"])
+            self.history[f"{split}_onestep"].append(_error(sq, self.data))
+        model.train(was_training)
 
 
 def evaluate(data: PreparedData, model: DynamicsMLP) -> tuple[dict, dict]:

@@ -21,24 +21,34 @@ import numpy as np
 import torch
 
 from experiments.model import Normalizer
-from experiments.config import CONDITION_GROUPS, RunConfig
+from experiments.config import CONDITION_GROUPS, UNIT_GROUPS, RunConfig
 from experiments.systems import SimEnv
 
 
 # ----------------------------------------------------------------------------- simulate
 
 def collect_trajectories(system, count, links, n_traj, steps, gravity_range, damping_range,
-                         seed_parts) -> dict[str, np.ndarray]:
-    """Simulate `n_traj` clips of `steps` steps. Returns states [n_traj, steps+1, D]."""
+                         seed_parts, length_range=None, mass_range=None) -> dict[str, np.ndarray]:
+    """Simulate `n_traj` clips of `steps` steps. Returns states [n_traj, steps+1, D].
+
+    With `length_range` / `mass_range`, every unit (pendulum or chain) of every clip gets its own
+    rod length / mass, so each clip is a slightly different world.
+    """
     env = SimEnv(system, count, links)
     rng = np.random.default_rng(np.random.SeedSequence(list(seed_parts)))
 
     # One random value per clip, fixed for the whole clip.
     gravity = rng.uniform(*gravity_range, size=n_traj)
     damping = rng.uniform(*damping_range, size=n_traj)
+    # One value per unit and clip (drawn after the others, so older data sets are unchanged).
+    lengths = rng.uniform(*length_range, size=(n_traj, count)) if length_range else None
+    masses = rng.uniform(*mass_range, size=(n_traj, count)) if mass_range else None
 
     states = np.empty((n_traj, steps + 1, env.state_dim), dtype=np.float32)
     for n in range(n_traj):
+        if lengths is not None or masses is not None:
+            env = SimEnv(system, count, links, lengths=None if lengths is None else lengths[n],
+                         masses=None if masses is None else masses[n])
         env.set_physics(gravity[n], damping[n])
         for _attempt in range(20):                     # redraw the start if the physics blew up
             states[n, 0] = env.reset(rng)
@@ -48,12 +58,17 @@ def collect_trajectories(system, count, links, n_traj, steps, gravity_range, dam
                 break
         else:
             raise RuntimeError(f"{system}: simulation unstable for 20 starts in a row.")
-    return {
+    out = {
         "states": states,
         "gravity": gravity.astype(np.float32),
         "damping": damping.astype(np.float32),
         "nq": np.array(env.nq),                        # number of position values (rest are speeds)
     }
+    if lengths is not None:
+        out["length"] = lengths.astype(np.float32)
+    if masses is not None:
+        out["mass"] = masses.astype(np.float32)
+    return out
 
 
 def load_or_collect(cache_dir: Path, **kwargs) -> dict[str, np.ndarray]:
@@ -79,6 +94,11 @@ def load_datasets(cfg: RunConfig, cache_dir: Path) -> dict[str, dict[str, np.nda
     """'train', 'test' (same gravity range, new clips) and optional 'g=<value>' test sets."""
     common = dict(system=cfg.system, count=cfg.count, links=cfg.links, steps=cfg.steps,
                   damping_range=tuple(cfg.damping_range))
+    # Only added when used, so the cache keys (and files) of older data sets stay the same.
+    if cfg.length_range is not None:
+        common["length_range"] = tuple(cfg.length_range)
+    if cfg.mass_range is not None:
+        common["mass_range"] = tuple(cfg.mass_range)
     sets = {
         "train": load_or_collect(cache_dir, n_traj=cfg.n_train_traj, gravity_range=tuple(cfg.gravity_range),
                                  seed_parts=(cfg.seed, 0), **common),
@@ -110,6 +130,9 @@ def condition_features(cfg: RunConfig, data: dict, token_seed: tuple[int, ...]):
         "gravity": data["gravity"][:, None] / 9.81,    # 1 number, 1.0 = Earth
         "damping": data["damping"][:, None],           # 1 number
     }
+    for name in UNIT_GROUPS:                           # one number per unit, e.g. 8 rod lengths
+        if name in data:
+            per_clip[name] = data[name]
     columns, groups, start = [], {}, 0
 
     def add(name: str, values: np.ndarray) -> None:
@@ -143,6 +166,7 @@ class Split:
     obs: torch.Tensor      # [n_traj, T+1, D] raw observations
     obs_n: torch.Tensor    # same, scaled
     cond_n: torch.Tensor   # [n_traj, T+1, C] scaled condition features
+    params: dict | None = None   # raw per-clip "length" / "mass" [n_traj, count], when they vary
 
 
 class PreparedData:
@@ -181,6 +205,7 @@ class PreparedData:
                 obs=obs.to(device),
                 obs_n=self.obs_norm.encode(obs).to(device),
                 cond_n=((torch.from_numpy(cond) - self.cond_mean) / self.cond_std).to(device),
+                params={k: np.asarray(data[k]) for k in UNIT_GROUPS if k in data} or None,
             )
         # Offsets -K+1 ... 0: which past steps form the context window.
         self.offsets = torch.arange(-cfg.context_len + 1, 1, device=device)
@@ -208,6 +233,22 @@ class PreparedData:
         else:
             target = self.delta_norm.encode(s.obs[n_idx, t_idx + 1] - s.obs[n_idx, t_idx])
         return context, cond, target
+
+    def unit_index(self) -> torch.Tensor:
+        """[count, 2*links]: the state entries (angles, then speeds) that belong to each unit."""
+        cfg = self.cfg
+        L = cfg.links
+        rows = [[i * L + j for j in range(L)] + [self.nq + i * L + j for j in range(L)] for i in range(cfg.count)]
+        return torch.tensor(rows, dtype=torch.long, device=self.device)
+
+    def unit_layout(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Condition columns shared by all units, and [count, n] columns that belong to each unit."""
+        per_unit = [self.groups[g] for g in UNIT_GROUPS if g in self.groups]
+        taken = {c for sl in per_unit for c in range(sl.start, sl.stop)}
+        shared = [c for c in range(self.cond_dim) if c not in taken]
+        unit_cols = [[sl.start + i for sl in per_unit] for i in range(self.cfg.count)]
+        return (torch.tensor(shared, dtype=torch.long, device=self.device),
+                torch.tensor(unit_cols, dtype=torch.long, device=self.device).reshape(self.cfg.count, len(per_unit)))
 
     def to_next_obs(self, pred_n: torch.Tensor, current_obs: torch.Tensor) -> torch.Tensor:
         """Turn a scaled model output back into the next raw observation."""

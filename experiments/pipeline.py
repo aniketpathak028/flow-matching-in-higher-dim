@@ -17,7 +17,7 @@ import torch
 
 from experiments.config import RunConfig
 from experiments.data import PreparedData, load_datasets
-from experiments.evaluate import evaluate
+from experiments.evaluate import TrainingTracker, evaluate
 from experiments.model import train
 from experiments.systems import SimEnv
 from PIL import Image, ImageDraw, ImageFont
@@ -33,13 +33,17 @@ def run_experiment(cfg: RunConfig, out_dir: Path, cache_dir: Path, device: str =
     t_data = time.time()
     data = PreparedData(cfg, sets, torch.device(device))
 
-    # 2. model
-    model, losses = train(cfg, data)
+    # 2. model (progress on fixed train/test examples is recorded along the way)
+    tracker = TrainingTracker(data)
+    model, losses = train(cfg, data, on_checkpoint=tracker)
     t_train = time.time()
 
     # 3. score
     metrics, curves = evaluate(data, model)
     curves["train_loss"] = np.asarray(losses)
+    curves.update({f"track/{k}": np.asarray(v) for k, v in tracker.history.items()})
+    n_examples = int(data.examples("train", cfg.context_len - 1)[0].numel())
+    updates_per_epoch = -(-n_examples // cfg.batch_size)
 
     # 4. save
     result = {
@@ -49,8 +53,12 @@ def run_experiment(cfg: RunConfig, out_dir: Path, cache_dir: Path, device: str =
         "obs_dim": data.obs_dim,
         "cond_dim": data.cond_dim,
         "n_params": sum(p.numel() for p in model.parameters()),
-        "train_transitions": int(data.examples("train", cfg.context_len - 1)[0].numel()),
+        "train_transitions": n_examples,
+        "updates_per_epoch": updates_per_epoch,
+        "updates": updates_per_epoch * cfg.epochs,              # total weight updates (training iterations)
+        "examples_seen": n_examples * cfg.epochs,
         "final_train_loss": losses[-1],
+        "final_test_loss": tracker.history["test_loss"][-1],
         **metrics,
         "seconds_data": t_data - t_start,
         "seconds_train": t_train - t_data,
@@ -65,7 +73,8 @@ def run_experiment(cfg: RunConfig, out_dir: Path, cache_dir: Path, device: str =
     return result
 
 
-def render_video(cfg: RunConfig, run_dir: Path, path: Path, fps: int = 25, split: str = "test") -> None:
+def render_video(cfg: RunConfig, run_dir: Path, path: Path, fps: int = 25, split: str = "test",
+                 cache_dir: Path | None = None) -> None:
     """Side-by-side video of the true (left) and predicted (right) rollout of the first clip of `split`.
 
     The rollout is 100 steps = 1 s of simulated time, shown at 25 frames/s (4x slow motion).
@@ -81,7 +90,13 @@ def render_video(cfg: RunConfig, run_dir: Path, path: Path, fps: int = 25, split
     model_label = "Flow-matching model" if cfg.model == "fm" else "Regression model"
     if cfg.target == "state":
         model_label += " (next state)"
-    env = SimEnv(cfg.system, cfg.count, cfg.links, img_size=(640, 400))
+    shape = {}
+    if cfg.length_range is not None or cfg.mass_range is not None:
+        # Every clip has its own rods: draw the ones of the clip shown (first clip of `split`).
+        clip = load_datasets(cfg, cache_dir or run_dir.parent.parent / "datasets")[split]
+        shape = {k: clip[k][0] for k in ("length", "mass") if k in clip}
+    env = SimEnv(cfg.system, cfg.count, cfg.links, img_size=(640, 400),
+                 lengths=shape.get("length"), masses=shape.get("mass"))
     font = ImageFont.load_default(size=22)
     path.parent.mkdir(parents=True, exist_ok=True)
     with mediapy.VideoWriter(str(path), shape=(400, 1280), fps=fps) as writer:

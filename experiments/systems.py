@@ -66,7 +66,7 @@ def _world(name: str, timestep: float, bodies: str, floor_size: float, solid_flo
     """
 
 
-def _hanging_grid(count: int, links: int, stacked: bool) -> tuple[int, int, float]:
+def _hanging_grid(count: int, links: int, stacked: bool, link_length: float = LINK_LENGTH) -> tuple[int, int, float]:
     """(columns, rows, row spacing) for hanging pendulums.
 
     Simulation always uses one row. For videos (`stacked`), more than 8 units are stacked in
@@ -74,7 +74,7 @@ def _hanging_grid(count: int, links: int, stacked: bool) -> tuple[int, int, floa
     change the motion; it only shifts floating-point rounding, which is why it is kept out of
     the simulation (cached clips stay bit-identical).
     """
-    chain = LINK_LENGTH * links
+    chain = link_length * links
     row_spacing = 2 * chain + 0.15
     if count <= 8 or not stacked:
         return count, 1, row_spacing
@@ -84,9 +84,16 @@ def _hanging_grid(count: int, links: int, stacked: bool) -> tuple[int, int, floa
     return cols, rows, row_spacing
 
 
-def _pendulum_xml(count: int, links: int, ground: bool, stacked: bool = False) -> str:
-    """Hanging (rods point down from a raised mount) or ground (rods point up from the floor)."""
-    chain = LINK_LENGTH * links
+def _pendulum_xml(count: int, links: int, ground: bool, stacked: bool = False,
+                  lengths=None, masses=None) -> str:
+    """Hanging (rods point down from a raised mount) or ground (rods point up from the floor).
+
+    `lengths` (metres per rod) and `masses` (factor of the normal mass) give every unit its own
+    rods; all links of one chain share them. Left out, every rod is LINK_LENGTH long with the
+    normal mass, and the XML is exactly what it was before these options existed.
+    """
+    link_len = [LINK_LENGTH] * count if lengths is None else [float(v) for v in lengths]
+    chain = max(link_len) * links
     sign = 1 if ground else -1                       # +1: links point up, -1: links point down
     # Ground hinges sit 5 cm above the floor. (In the very first version they sat exactly on
     # it, so the rounded rod end was always 3 cm inside the floor and in permanent contact.)
@@ -97,18 +104,20 @@ def _pendulum_xml(count: int, links: int, ground: bool, stacked: bool = False) -
     if ground:
         places = [(x, height) for x in _row(count, spacing=2 * chain + 0.05)]
     else:
-        cols, rows, row_spacing = _hanging_grid(count, links, stacked)
+        cols, rows, row_spacing = _hanging_grid(count, links, stacked, max(link_len))
         xs = _row(cols, spacing=2 * chain + 0.05)
         places = [(xs[i % cols], height + (rows - 1 - i // cols) * row_spacing) for i in range(count)]
     for i, (x, z) in enumerate(places):
         xml = (f'<body name="mount_{i}" pos="{x} 0 {z}">'
                f'<geom type="cylinder" size="0.05 0.03" euler="90 0 0" rgba="0.25 0.27 0.3 1" contype="0" conaffinity="0"/>')
+        length = LINK_LENGTH if lengths is None else link_len[i]
+        density = "" if masses is None else f' density="{1000.0 * float(masses[i]):.6g}"'   # MuJoCo default: 1000
         for k in range(links):
-            pos = "0 0 0" if k == 0 else f"0 0 {sign * LINK_LENGTH}"
+            pos = "0 0 0" if k == 0 else f"0 0 {sign * length}"
             xml += (f'<body name="p{i}_l{k}" pos="{pos}">'
                     f'<joint name="p{i}_j{k}" type="hinge" axis="0 1 0" armature="0.01"/>'
-                    f'<geom name="rod_{i}_{k}" type="capsule" fromto="0 0 0 0 0 {sign * LINK_LENGTH}" '
-                    f'size="{ROD_RADIUS}" rgba="{COLORS[i % len(COLORS)]}" {rod_contact}/>')
+                    f'<geom name="rod_{i}_{k}" type="capsule" fromto="0 0 0 0 0 {sign * length}" '
+                    f'size="{ROD_RADIUS}"{density} rgba="{COLORS[i % len(COLORS)]}" {rod_contact}/>')
         xml += "</body>" * (links + 1)
         parts.append(xml)
     name = f"{count}_{'ground' if ground else 'hanging'}_pendulums_{links}_links"
@@ -168,15 +177,20 @@ def _balls_xml(count: int) -> str:
 class SimEnv:
     """One compiled MuJoCo world from SYSTEMS, with a common interface."""
 
-    def __init__(self, system: str, count: int, links: int = 1, img_size: tuple[int, int] | None = None):
+    def __init__(self, system: str, count: int, links: int = 1, img_size: tuple[int, int] | None = None,
+                 lengths=None, masses=None):
         if system not in SYSTEMS:
             raise ValueError(f"Unknown system '{system}'. Choose from {SYSTEMS}.")
         if count <= 0 or links <= 0:
             raise ValueError("count and links must be positive.")
+        if (lengths is not None or masses is not None) and system not in ("pendulum", "ground"):
+            raise ValueError("lengths / masses only exist for pendulum worlds.")
         self.system, self.count, self.links = system, count, links
+        self.link_length = LINK_LENGTH if lengths is None else float(np.max(lengths))
         xml = {
-            "pendulum": lambda: _pendulum_xml(count, links, ground=False, stacked=img_size is not None),
-            "ground": lambda: _pendulum_xml(count, links, ground=True),
+            "pendulum": lambda: _pendulum_xml(count, links, ground=False, stacked=img_size is not None,
+                                              lengths=lengths, masses=masses),
+            "ground": lambda: _pendulum_xml(count, links, ground=True, lengths=lengths, masses=masses),
             "spring_chain": lambda: _spring_chain_xml(count, links),
             "cartpole": lambda: _cartpole_xml(count),
             "balls": lambda: _balls_xml(count),
@@ -259,10 +273,10 @@ class SimEnv:
     # ------------------------------------------------------------------ rendering
     def _view_box(self) -> tuple[float, float, float, float]:
         """(half width, z low, z high, elevation) of the region the camera should show."""
-        chain = LINK_LENGTH * self.links
+        chain = self.link_length * self.links
         row = lambda spacing, size: (self.count - 1) * spacing / 2 + size
         if self.system == "pendulum":     # mount at chain + 0.2, chains can swing up to 2 * chain + 0.2
-            cols, rows, row_spacing = _hanging_grid(self.count, self.links, self.img_size is not None)
+            cols, rows, row_spacing = _hanging_grid(self.count, self.links, self.img_size is not None, self.link_length)
             half = (cols - 1) * (2 * chain + 0.05) / 2 + chain
             return half, 0.0, 2 * chain + 0.25 + (rows - 1) * row_spacing, -6
         if self.system == "ground":       # rods lie on the floor or stand up to `chain`
