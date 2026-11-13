@@ -62,12 +62,10 @@ In chat, give:
 - the conclusions;
 - anything surprising or anything that went wrong.
 
-Then republish the private preview artifact from `docs/`:
-- `publish_files` with slug `51c27da5-0af2-463b-8ab9-daa66abc9fa5` ("Learning Pendulum Physics with Flow Matching");
-- `base_version` from `get_artifact`;
-- list only the changed files.
-
-Give the link: https://claude.ai/artifact/B6a5Z5DvWKvDwc8hYiTPTi. Do not take down or overwrite other artifacts.
+Then save the week:
+- copy `docs/index.html`, `data.js` and `charts.js` into `docs/weeks/week-NN/`, with video paths changed to `../../videos/`;
+- publish a **new** private artifact titled "Week N" from `docs/` (never overwrite an earlier week's artifact);
+- add its link to `docs/weeks/README.md`.
 
 **Wait for the user's OK** before committing.
 

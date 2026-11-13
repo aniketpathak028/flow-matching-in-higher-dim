@@ -6,7 +6,7 @@ through the explicit states of the MuJoCo simulator.
 A flow-matching network (a residual MLP) learns to predict the next state
 `[qpos, qvel]` of simulated MuJoCo worlds, mostly pendulums. It is scored on
 one-step error and on 100-step rollouts where it runs on its own predictions.
-Eleven experiments compare setups, model choices, inputs and state sizes up to D = 128.
+Seventeen experiments compare setups, model choices, inputs and state sizes up to D = 1024.
 
 ## Setup
 
@@ -19,7 +19,7 @@ pip install -r requirements.txt     # video rendering also needs ffmpeg (brew in
 ## Run
 
 ```bash
-python -m experiments.run                                  # all 11 experiments, seeds 0 1 2 (~1.5 h, resumable)
+python -m experiments.run                                  # all 17 experiments, seeds 0 1 2 (348 runs, days; resumable)
 python -m experiments.run --only setup collisions          # selected experiments
 python -m experiments.run --quick --out /tmp/q --seeds 0   # tiny smoke test, under a minute
 python -m experiments.run --set epochs=100                 # override any RunConfig field
@@ -51,8 +51,9 @@ every experiment. `python -m experiments.site` refreshes its numbers
 (`docs/data.js`) and videos from `results/`; the text is in `docs/index.html`.
 It is a static page, so it can be served as is, e.g. by GitHub Pages from `/docs`.
 Check it without a browser with `node scripts/check_site.js docs`.
+Each week's page is also kept as a snapshot in `docs/weeks/week-NN/` (see `docs/weeks/README.md`).
 
-## The 11 experiments
+## The 17 experiments
 
 | Key | Question |
 |---|---|
@@ -67,6 +68,12 @@ Check it without a browser with `node scripts/check_site.js docs`.
 | `nuisance` | Does the model ignore meaningless random inputs, or learn from them? |
 | `systems` | Spring chains, cart-poles and bouncing balls compared to the hanging pendulum at the same state size |
 | `dimension` | Growing the state from D = 16 to 128: separate pendulums vs 4-link chains |
+| `scaling` | D = 16 to 1024 with one flat network vs one shared network per unit (pendulum or chain) |
+| `training` | 60, 300 and 1000 epochs, with validation curves recorded during training |
+| `training_arch` | 60, 300 and 1000 epochs, flat vs per unit, at D = 16 to 1024 |
+| `parameters` | Every pendulum gets its own rod length and mass: which must the model be told, which can it work out? |
+| `noise` | Size of the flow-matching start noise, and noise on the input states during training |
+| `ground_params` | Ground pendulums with different rods: does telling lengths and masses help with the floor? |
 
 Each variant is defined once in `experiments/plan.py` and trained once per
 seed, even when several experiments compare it. A plain-language walkthrough

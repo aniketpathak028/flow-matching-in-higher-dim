@@ -16,7 +16,7 @@ plays the physics forward on its own. That is a **rollout**.
 | `data.py` | simulate clips (or load them from the cache), scale them, cut them into (input, answer) pairs |
 | `model.py` | the residual MLP, flow-matching training and prediction |
 | `evaluate.py` | one-step error, rollouts, shuffle test, train/test gap, floor check |
-| `plan.py` | every variant and the 11 experiments that compare them |
+| `plan.py` | every variant and the 17 experiments that compare them |
 | `systems.py` | the MuJoCo worlds: hanging and ground pendulums, springs, cart-poles, balls |
 | `run.py` | command line: trains missing runs in parallel, renders videos, builds the report |
 | `report.py` | averages seeds into figures, `REPORT.md` and `summary.json` |
@@ -29,7 +29,8 @@ RunConfig
   │                         each clip: random start, random gravity in 4–15 (and damping if enabled)
   ├─ data.PreparedData      scale to mean 0 / std 1; input = last K states (+ gravity, damping, tokens)
   │                         answer = change to the next state
-  ├─ model.train            flow matching, 60 epochs
+  ├─ model.train            flow matching, 60 epochs (300 from week 3); arch="units" = one shared network per unit
+  │                         progress on fixed train/test examples is recorded ~20 times (evaluate.TrainingTracker)
   ├─ evaluate.evaluate      on the 50 unseen test clips
   └─ save                   results/runs/<variant>__seed<k>/metrics.json + curves.npz
 ```
