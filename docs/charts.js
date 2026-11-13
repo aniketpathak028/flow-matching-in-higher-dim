@@ -10,7 +10,7 @@
     const get = (k) => css.getPropertyValue(k).trim();
     return {
       ink: get("--ink"), muted: get("--muted"), grid: get("--grid"), card: get("--card"),
-      series: [get("--s1"), get("--s2"), get("--s3"), get("--s4")],
+      series: [get("--s1"), get("--s2"), get("--s3"), get("--s4"), get("--q1"), get("--q2"), get("--q3")],
       font: get("--font-body") || "sans-serif",
     };
   }
@@ -72,7 +72,7 @@
       hovertemplate: `%{x} · ${s.label}<br>%{customdata[0]} ± %{customdata[1]}${opts.unit || ""}<extra></extra>`,
     }));
     Plotly.react(el, traces, layout(t, {
-      title: { text: opts.title }, barmode: "group", bargap: 0.35, bargroupgap: 0.08, showlegend: true,
+      title: { text: opts.title }, barmode: "group", bargap: 0.35, bargroupgap: 0.08, showlegend: opts.legend !== false,
       yaxis: { type: opts.log ? "log" : "linear", title: { text: opts.yTitle || "" } },
     }), { displayModeBar: false, responsive: true });
   }
@@ -96,7 +96,7 @@
     if (opts.band) shapes.push({ type: "rect", x0: opts.band[0], x1: opts.band[1], yref: "paper", y0: 0, y1: 1,
       fillcolor: t.grid, opacity: 0.55, line: { width: 0 }, layer: "below" });
     Plotly.react(el, traces, layout(t, {
-      title: { text: opts.title }, showlegend: true, shapes,
+      title: { text: opts.title }, showlegend: opts.legend !== false, shapes,
       xaxis: { type: opts.logx ? "log" : "linear", title: { text: opts.xTitle || "" }, tickvals: opts.tickvals },
       yaxis: { type: opts.logy ? "log" : "linear", title: { text: opts.yTitle || "" }, range: opts.yrange },
       annotations: opts.bandLabel ? [{ x: (opts.band[0] + opts.band[1]) / 2, yref: "paper", y: 1.0, text: opts.bandLabel,
@@ -122,12 +122,31 @@
     }), { displayModeBar: false, responsive: true });
   }
 
+  /* Curves with their own x values, e.g. error over training epochs. series = [{label, x, y, dash, color}] */
+  function xy(el, series, opts) {
+    const t = theme();
+    const traces = series.map((s, i) => ({
+      type: "scatter", mode: "lines", name: s.label, x: s.x, y: s.y,
+      line: { color: t.series[s.color != null ? s.color : i], width: s.dash ? 1.4 : 2.2, dash: s.dash || "solid" },
+      hovertemplate: `<b>${s.label}</b><br>${opts.xName || "x"} %{x}: %{y:.3g}<extra></extra>`,
+    }));
+    Plotly.react(el, traces, layout(t, {
+      title: { text: opts.title }, showlegend: opts.legend !== false,
+      xaxis: { type: opts.logx ? "log" : "linear", title: { text: opts.xTitle || "" } },
+      yaxis: { type: opts.logy ? "log" : "linear", title: { text: opts.yTitle || "" }, range: opts.yrange },
+    }), { displayModeBar: false, responsive: true });
+  }
+
   /* Numbers table for one experiment: rows = its variants, columns = [[key, title, scale], ...] */
   function table(el, exp, columns) {
     const head = "<tr><th>Variant</th><th>D</th>" + columns.map((c) => `<th>${c[1]}</th>`).join("") + "</tr>";
     const rows = Object.entries(exp.variants).map(([label, name]) => {
       const dim = V[name] ? V[name].settings.state_dim : "–";
       const cells = columns.map(([key, , scale]) => {
+        if (key.startsWith("@")) {   // a setting of the run, e.g. "@updates", not a measured value
+          const v = V[name] ? V[name].settings[key.slice(1)] : undefined;
+          return `<td class="n">${v != null ? Number(v).toLocaleString("en-US") : "–"}</td>`;
+        }
         const [m, ci] = metric(name, key);
         return `<td class="n">${isFinite(m) ? fmt(m * (scale || 1)) + " <span class='ci'>± " + fmt(ci * (scale || 1)) + "</span>" : "–"}</td>`;
       });
@@ -136,7 +155,7 @@
     el.innerHTML = `<table><thead>${head}</thead><tbody>${rows.join("")}</tbody></table>`;
   }
 
-  window.Charts = { metric, curve, bars, grouped, lines, curves, table };
+  window.Charts = { metric, curve, bars, grouped, lines, curves, xy, table };
 
   // Re-draw every chart when the theme changes.
   const redraws = [];
