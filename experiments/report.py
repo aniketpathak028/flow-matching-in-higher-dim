@@ -40,14 +40,30 @@ EXTRA_COLUMNS = {
     "collisions": [("onestep_error_free", "1-step, no contact"), ("onestep_error_contact", "1-step, contact"),
                    ("inside_floor_true", ">5 cm in floor (truth)"), ("inside_floor_pred", ">5 cm in floor (model)"),
                    ("deepest_pred_cm", "deepest, model (cm)")],
+    "ground_params": [("onestep_error_free", "1-step, no contact"), ("onestep_error_contact", "1-step, contact"),
+                      ("inside_floor_true", ">5 cm in floor (truth)"), ("inside_floor_pred", ">5 cm in floor (model)"),
+                      ("final_test_loss", "test loss")],
     "gravity": [("shuffle_gravity", "shuffle gravity")],
     "extrapolation": [(f"g={g:g}/onestep_error", f"1-step @ g={g:g}") for g in (2, 9.81, 20, 25)],
     "damping": [("shuffle_damping", "shuffle damping")],
     "context": [("shuffle_gravity", "shuffle gravity")],
     "nuisance": [("shuffle_tokens", "shuffle tokens"), ("shuffle_gravity", "shuffle gravity")],
     "systems": [("copy_onestep_error", "copy baseline 1-step")],
+    "scaling": [("train_onestep_error", "train 1-step")],
+    "training": [("train_onestep_error", "train 1-step"), ("final_train_loss", "train loss (last epoch)"),
+                 ("final_test_loss", "test loss")],
+    "parameters": [("shuffle_length", "shuffle length"), ("shuffle_mass", "shuffle mass"),
+                   ("shuffle_gravity", "shuffle gravity")],
 }
-CURVES = ("test/rollout_error", "test/copy_rollout_error", "test/inside_floor_pred", "test/inside_floor_true")
+SETTING_COLUMNS = {   # integer settings shown in a table (week 3 onwards)
+    "scaling": [("n_params", "network weights"), ("updates", "updates")],
+    "training": [("epochs", "epochs"), ("updates", "updates")],
+    "training_arch": [("epochs", "epochs"), ("updates", "updates")],
+    "parameters": [("cond_dim", "inputs besides the state")],
+}
+CURVES = ("test/rollout_error", "test/copy_rollout_error", "test/inside_floor_pred", "test/inside_floor_true",
+          "track/epoch", "track/train_loss", "track/test_loss", "track/train_onestep", "track/test_onestep",
+          "train_loss")
 
 
 # ----------------------------------------------------------------------------- loading
@@ -74,8 +90,17 @@ def load(out_root: Path) -> dict[str, dict]:
                 with np.load(run_dir / "curves.npz") as c:
                     if curve in c:
                         stack.append(c[curve])
-            if stack:
-                entry["curves"][curve.split("/", 1)[1]] = np.mean(stack, axis=0).round(5).tolist()
+            if stack and len({len(x) for x in stack}) == 1:
+                # "test/rollout_error" -> "rollout_error"; "track/test_loss" -> "track_test_loss";
+                # "train_loss" (loss of every epoch) -> "epoch_loss"
+                key = ("epoch_loss" if curve == "train_loss" else
+                       curve.replace("/", "_") if curve.startswith("track/") else curve.split("/", 1)[1])
+                mean = np.mean(stack, axis=0)
+                if key == "epoch_loss" and len(mean) > 200:      # keep the page light: ~200 points, log-spaced
+                    keep = np.unique(np.geomspace(1, len(mean), 200).round().astype(int)) - 1
+                    entry["curves"]["epoch_loss_epochs"] = (keep + 1).tolist()
+                    mean = mean[keep]
+                entry["curves"][key] = [float(f"{v:.5g}") for v in mean]
         table[name] = entry
     return table
 
@@ -148,6 +173,34 @@ def figure(table: dict, exp: Experiment, path: Path) -> None:
             ax.set_xscale("log", base=2)
             ax.set_xticks([16, 32, 64, 128], ["16", "32", "64", "128"])
         axes[0].legend(fontsize=8)
+    elif key == "scaling":
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+        groups = defaultdict(list)
+        for label, name in exp.variants.items():
+            series, d = label.rsplit(" · D=", 1)
+            groups[series].append((int(d), name))
+        _lines(axes[0], table, groups, "onestep_error", "1-step error", "state dimension D")
+        _lines(axes[1], table, groups, "valid_steps", "Valid rollout steps (of 100)", "state dimension D", log=False)
+        for ax in axes:
+            ax.set_xscale("log", base=2)
+            ax.set_xticks([16, 32, 64, 128, 256, 512, 1024], ["16", "32", "64", "128", "256", "512", "1024"])
+        axes[0].legend(fontsize=7)
+    elif key == "training":
+        fig, axes = plt.subplots(1, 4, figsize=(18, 4), sharey=True)
+        setups = defaultdict(list)
+        for label, name in exp.variants.items():
+            setup, epochs = label.rsplit(" · ", 1)
+            setups[setup].append((epochs, name))
+        for ax, (setup, runs) in zip(axes, setups.items()):
+            for color, (epochs, name) in zip(SERIES, runs):
+                c = table.get(name, {}).get("curves", {})
+                if "track_epoch" in c:
+                    ax.plot(c["track_epoch"], c["track_test_onestep"], color=color, label=f"{epochs} · test")
+                    ax.plot(c["track_epoch"], c["track_train_onestep"], color=color, linestyle="--",
+                            linewidth=1.2, label=f"{epochs} · train")
+            ax.set(xscale="log", yscale="log", xlabel="epoch", title=setup)
+            ax.legend(fontsize=7)
+        axes[0].set_ylabel("1-step error")
     elif key == "context":
         fig, axes = plt.subplots(1, 2, figsize=(11, 4))
         groups = defaultdict(list)
@@ -214,12 +267,15 @@ def _fmt(m: tuple[float, float]) -> str:
 
 def section(table: dict, exp: Experiment) -> str:
     columns = COLUMNS + EXTRA_COLUMNS.get(exp.key, [])
+    settings = SETTING_COLUMNS.get(exp.key, [])
     lines = [f"## {exp.title}", "", f"*{exp.question}*", "", f"![{exp.key}](figures/{exp.key}.png)", "",
-             "| variant | run | D | " + " | ".join(t for _, t in columns) + " |",
-             "|---|---|---|" + "---|" * len(columns)]
+             "| variant | run | D | " + " | ".join(t for _, t in settings + columns) + " |",
+             "|---|---|---|" + "---|" * len(settings + columns)]
     for label, name in exp.variants.items():
-        dim = table.get(name, {}).get("settings", {}).get("state_dim", "–")
-        lines.append(f"| {label} | `{name}` | {dim} | " + " | ".join(_fmt(value(table, name, k)) for k, _ in columns) + " |")
+        info = table.get(name, {}).get("settings", {})
+        lines.append(f"| {label} | `{name}` | {info.get('state_dim', '–')} | "
+                     + "".join(f"{info.get(k, '–'):,} | " if isinstance(info.get(k), int) else "– | " for k, _ in settings)
+                     + " | ".join(_fmt(value(table, name, k)) for k, _ in columns) + " |")
     return "\n".join(lines) + "\n"
 
 
